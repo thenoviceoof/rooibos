@@ -100,6 +100,7 @@ INSTALLED_APPS = (
     'rooibos.contrib.tagging',
     'rooibos.workers',
     'rooibos.userprofile',
+    'rooibos.mobile',
     'pagination',
     'impersonate',
     'compressor',
