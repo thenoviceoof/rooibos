@@ -44,6 +44,7 @@ urls = [
     (r'^flickr/', include('rooibos.federatedsearch.flickr.urls')),
     (r'^artstor/', include('rooibos.federatedsearch.artstor.urls')),
     (r'^impersonate/', include('rooibos.contrib.impersonate.urls')),
+    (r'^mobile/', include('rooibos.mobile.urls')),
 
     url(r'^static/(?P<path>.*)$', serve, {'document_root': settings.STATIC_DIR}, name='static'),
     ]

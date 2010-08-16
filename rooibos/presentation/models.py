@@ -71,7 +71,7 @@ class Presentation(models.Model):
         valid_publishers = User.objects.filter(Q(id__in=publish_permission.user_set.all()) |
                                                Q(groups__id__in=publish_permission.group_set.all()))
         q = Q(owner__in=valid_publishers) & Q(hidden=False)
-        if owner:
+        if owner and not owner.is_anonymous():
             return q | Q(owner=owner)
         else:
             return q

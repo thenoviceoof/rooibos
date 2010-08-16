@@ -1,0 +1,251 @@
+{% extends "mobile-master.html" %}
+
+{% block javascript %}
+<script type="text/javascript">
+$(document).ready(function() {
+    var sessionid = null;
+    
+    function load_owners() {
+        $.ajax({
+            type: 'GET',
+            url: '{% url api-presentation-owners %}',
+            success: function(data) {
+                if (data.result && data.result == 'ok') {
+                    if (data.owners.length) {
+                        var html = "";
+                        for (var o in data.owners) {
+                            html += "<li class='arrow'><a href='#presentations' class='owner_link' name='" + data.owners[o].id + "'>" + data.owners[o].name + "</a></li>";
+                        }
+                        $('#owners_list').html(html);
+                    } else { 
+                        $('#owners_list').html("<li>No presentations available</li>");
+                    }
+                } else {
+                    $('#owners_list').html("<li>Could not load presentations</li>");  
+                }
+                
+            },
+            dataType: 'json'
+        });
+    }
+    
+    function load_presentations(user_id) {
+        $.ajax({
+            type: 'GET',
+            url: '{% url api-presentations '999' %}'.replace('999', user_id),
+            success: function(data) {
+                if (data.result && data.result == 'ok') {
+                    if (data.presentations.length) {
+                        var html = "";
+                        for (var p in data.presentations) {
+                            if (data.presentations[p].password) {
+                                html += "<li class='arrow'><a href='#viewer' class='password_link' name='" + data.presentations[p].id + "'>" + data.presentations[p].title + " <img src='{% url static 'images/locked.png' %}' /></a></li>";
+                            } else {
+                                html += "<li class='arrow'><a href='#viewer' class='presentation_link' name='" + data.presentations[p].id + "'>" + data.presentations[p].title + "</a></li>";
+                            }
+                        }
+                        $('#presentations_list').html(html);
+                    } else { 
+                        $('#presentations_list').html("<li>No presentations available</li>");
+                    }
+                } else {
+                    $('#presentations_list').html("<li>Could not load presentations</li>");  
+                }
+                jQT.goTo('#presentations');
+            },
+            dataType: 'json'
+        });        
+    }
+    
+    var slides;
+    var currentSlide;
+    
+    function update_viewer() {
+        $("#viewerstatus h1").text(slides[currentSlide].title + " " + (currentSlide + 1) + "/" + slides.length);
+        $("#slide").height($(window).height() - 90);
+        $("#slide").html("<img src='" + slides[currentSlide].image + "' />");
+    }
+    
+    function load_presentation(id) {
+        $.ajax({
+            type: 'GET',
+            url: '{% url api-presentation-detail '999' %}'.replace('999', id),
+            success: function(data) {
+                if (data.result && data.result == 'ok') {
+                    if (data.content.length > 0) {
+                        $("#viewer .toolbar h1").eq(0).text(data.title);
+                        slides = data.content;
+                        currentSlide = 0;
+                        update_viewer();
+                        jQT.goTo('#viewer');
+                    } else {
+                        alert("Presentation is empty");
+                    }
+                } else {
+                    alert("Could not load presentation");
+                }
+            },
+            dataType: 'json'
+        });        
+    }
+    
+    $('#login').submit(function() {
+        var login_form = this;
+        $.ajax({
+            type: 'POST',
+            url: '{% url api-login %}',
+            data: {username: $('#username').val(),
+                   password: $('#password').val()},
+            success: function(data) {
+                if (data.result && data.result == 'ok') {
+                    sessionid = data.sessionid;
+                    login_form.reset();
+                    load_owners();
+                    jQT.goTo('#owners');
+                }
+            },
+            dataType: 'json'
+        });
+        return false;
+    });
+    
+    $('.owner_link').live('click', function() {
+        load_presentations(this.name);
+        return false;
+    });
+    
+    $('.presentation_link').live('click', function() {
+        load_presentation(this.name);
+        return false;
+    });
+ 
+    $('.password_link').live('click', function() {
+        $("#password_for").val(this.name);
+        $("#password_page .toolbar h1").text($(this).text());
+        jQT.goTo('#password_page');
+        return false;
+    });
+    
+    $('#password_form').submit(function() {
+        var password_form = this;
+        var id = $("#password_for").val();
+        $.ajax({
+            type: 'POST',
+            url: '{% url api-presentation-password '999' %}'.replace('999', id),
+            data: {password: $('#presentation_password').val()},
+            success: function(data) {
+                if (data.result && data.result == 'ok') {
+                    load_presentation(id);
+                    password_form.reset();
+                    jQT.goTo('#viewer');
+                } else {
+                    alert("Invalid password, please try again.");
+                }
+            },
+            dataType: 'json'
+        });
+        return false;
+    });    
+   
+    $('.logout').click(function() {
+        $.get('{% url api-logout %}');
+        $('#owners_list').html("");
+        $('#presentations_list').html("");
+    });
+});
+</script>
+{% endblock %}
+
+
+{% block content %}
+
+<div id="home">
+    <div class="toolbar">
+        <h1>MDID</h1>
+        <a href="#about" class="button leftButton flip">About</a>
+    </div>
+    <form id="login">
+        <ul class="rounded">
+            <li>Username:<br /><input type="text" id="username" name="username" value="admin" /></li>
+            <li>Password:<br /><input type="password" id="password" name="password" value="admin" /></li>
+        </ul>
+         <a href="#" style="margin: 10px;" class="whiteButton submit">Log In</a>
+    </form>
+</div>
+
+
+<div id="password_page">
+    <div class="toolbar">
+        <h1>Password</h1>
+        <a href="#home" class="button rightButton flip logout">Log Out</a>
+        <a href="#presentations" class="button leftButton flip">Back</a>
+    </div>
+    <form id="password_form">
+        <input type="hidden" name="password_for" id="password_for" />
+        <ul class="rounded">
+            <li>Password:<br /><input type="password" id="presentation_password" name="presentation_password" value="test" /></li>
+        </ul>
+         <a href="#" style="margin: 10px;" class="whiteButton submit">Continue</a>
+    </form>
+</div>
+
+
+<div id="owners">
+     <div class="toolbar">
+        <h1>Presenters</h1>
+        <a href="#home" class="button rightButton flip logout">Log Out</a>
+    </div>
+    <div>
+        <ul class="edgetoedge" id="owners_list">
+        </ul>
+    </div>   
+</div>
+
+
+<div id="presentations">
+     <div class="toolbar">
+        <h1>Presentations</h1>
+        <a href="#home" class="button rightButton flip logout">Log Out</a>
+        <a href="#owners" class="button leftButton flip">Back</a>
+    </div>
+    <div>
+        <ul class="edgetoedge" id="presentations_list">
+        </ul>
+    </div>   
+</div>
+
+
+<div id="viewer">
+    <div class="toolbar">
+        <h1></h1>
+        <a href="#home" class="button rightButton flip logout">Log Out</a>
+        <a href="#presentations" class="button leftButton flip">Back</a>
+    </div>
+    
+    <div id="slide" style="width: 100%; background-color: black;">
+        
+    </div>
+    
+    <div class="toolbar" id="viewerstatus" style="position: fixed; bottom: 0; width: 100%;">
+        <h1 style="font-size: smaller; padding-top: 0.3em;"></h1>
+        <a href="#next" class="button rightButton flip">&gt;</a>
+        <a href="#prev" class="button leftButton flip">&lt;</a>
+    </div>    
+</div>
+
+
+<div id="about">
+    <div class="toolbar">
+        <h1>About</h1>
+        <a href="#home" class="cancel">Cancel</a>
+    </div>
+   <div class="info">
+        Welcome to the Madison Digital Image Database 3 mobile slideshow viewer.
+        <br /><br />
+        Copyright 2010 James Madison University
+    </div>
+
+</div>
+
+
+{% endblock %}
