@@ -135,10 +135,61 @@ def presentations_for_current_user(request):
                  hidden=p.hidden,
                  description=p.description,
                  created=p.created.isoformat(),
-                 modified=p.modified.isoformat())
+                 modified=p.modified.isoformat(),
+                 owner=p.owner.get_full_name())
             for p in presentations
         ]
     }
+
+
+@json_view
+def presentation_owners(request):   
+    owners = User.objects.filter(id__in=filter_by_access(request.user,
+                                                         Presentation.objects.filter(
+                                                            Presentation.published_Q(owner=request.user))).values('owner'))
+    return {
+        'owners': [
+            dict(id=o.id,
+                 name=o.get_full_name())
+            for o in owners
+        ]
+    }
+
+
+@json_view
+def presentations(request, owner=None):    
+    q = Q(owner__id=owner) if owner else Q()
+    pres = filter_by_access(request.user, Presentation.objects.filter(q, Presentation.published_Q(owner=request.user))).order_by('title')
+    return {
+        'presentations': [
+            dict(id=p.id,
+                 name=p.name,
+                 title=p.title,
+                 hidden=p.hidden,
+                 description=p.description,
+                 created=p.created.isoformat(),
+                 modified=p.modified.isoformat(),
+                 owner=p.owner.get_full_name(),
+                 password=bool(p.password))
+            for p in pres
+        ]
+    }
+
+
+@json_view
+def presentation_password(request, id):
+    try:
+        p = filter_by_access(request.user, Presentation.objects.filter(Presentation.published_Q(owner=request.user))).get(id=id)
+    except Presentation.DoesNotExist:
+        p = None
+    password = request.POST.get('password')
+    if p and password:
+        if p.password == password:
+            request.session.setdefault('passwords', dict())[p.id] = password
+            return dict()
+        else:
+            return dict(result='invalid')
+    return dict(result='error')
 
 
 @cache_control(no_cache=True)

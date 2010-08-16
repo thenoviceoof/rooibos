@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <title>MDID3</title>
+        <style type="text/css" media="screen">@import "{% url static 'jqtouch/jqtouch/jqtouch.min.css' %}";</style>
+        <style type="text/css" media="screen">@import "{% url static 'jqtouch/themes/apple/theme.min.css' %}";</style>
+        <script src="{% url static 'jquery/jquery-1.4.1.js' %}" type="text/javascript"></script>
+        <script src="{% url static 'jqtouch/jqtouch/jqtouch.min.js' %}" type="application/x-javascript"></script>
+        <script type="text/javascript">
+            var jQT = $.jQTouch({
+                icon: 'icon.png',
+                startupScreen: 'img/startup.png'
+            });
+        </script>
+        {% block javascript %}
+        {% endblock %}
+    </head>
+    <body>
+{% block content %}
+{% endblock %}
+    </body>
+</html>
