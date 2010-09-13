@@ -3,8 +3,13 @@
 # with a blank setting in settings_local.template.py
 
 import os
+import sys
 
 install_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
+lib_dir = os.path.join(install_dir, 'rooibos', 'contrib')
+
+if not install_dir in sys.path: sys.path.append(install_dir)
+if not lib_dir in sys.path: sys.path.append(lib_dir)
 
 # Language code for this installation. All choices can be found here:
 # http://www.i18nguy.com/unicode/language-identifiers.html
@@ -147,12 +152,13 @@ additional_settings = [
     'settings_local',
 ]
 
-if os.environ.get('ROOIBOS_ADDITIONAL_SETTINGS'):
-    additional_settings.append(os.environ.get('ROOIBOS_ADDITIONAL_SETTINGS'))
+additional_settings.extend(filter(None, os.environ.get('ROOIBOS_ADDITIONAL_SETTINGS', '').split(';')))
 
 # Load settings for additional applications
-for settings in additional_settings:
-#    print "Loading additional settings from %s" % settings
+
+
+while additional_settings:
+    settings = additional_settings.pop(0)
     module = __import__(settings, globals(), locals(), 'rooibos')
     for setting in dir(module):
         if setting == setting.upper():
@@ -162,9 +168,11 @@ for settings in additional_settings:
                 elif isinstance(locals()[setting], tuple):
                     locals()[setting] += (getattr(module, setting))
                 else:
-#                    print "Overriding %s" % setting
                     locals()[setting] = getattr(module, setting)
             else:
                 locals()[setting] = getattr(module, setting)
         elif setting == 'additional_settings':
-            additional_settings += getattr(module, setting)
+            additional_settings[:0] = getattr(module, setting)
+        elif setting == 'remove_settings':
+            for remove_setting in getattr(module, setting):
+                del locals()[remove_setting]

@@ -19,6 +19,8 @@ from rooibos.storage.models import Storage, Media
 from rooibos.storage.views import create_proxy_url_if_needed
 from rooibos.ui import update_record_selection
 from rooibos.util import safe_int, json_view
+from rooibos.util.models import OwnedWrapper
+from rooibos.contrib.tagging.models import Tag
 import django.contrib.auth
 
 
@@ -103,7 +105,7 @@ def _presentation_item_as_json(item, owner=None, process_url=lambda url: url):
     if annotation:
         data['metadata'].append(dict(label='Annotation', value=annotation))
     return data
-  
+
 def _presentation_items_as_json(items, owner=None, process_url=lambda url: url):
     return [_presentation_item_as_json(item, owner, process_url) for item in items]
 
@@ -124,6 +126,11 @@ def record(request, id, name):
 
 @json_view
 def presentations_for_current_user(request):
+
+    def tags_for_presentation(presentation):
+        ownedwrapper = OwnedWrapper.objects.get_for_object(request.user, presentation)
+        return [tag.name for tag in Tag.objects.get_for_object(ownedwrapper)]
+
     if request.user.is_anonymous():
         return dict(presentations=[])
     presentations = Presentation.objects.filter(owner=request.user).order_by('title')
@@ -136,14 +143,15 @@ def presentations_for_current_user(request):
                  description=p.description,
                  created=p.created.isoformat(),
                  modified=p.modified.isoformat(),
-                 owner=p.owner.get_full_name())
+                 owner=p.owner.get_full_name(),
+                 tags=tags_for_presentation(p))
             for p in presentations
         ]
     }
 
 
 @json_view
-def presentation_owners(request):   
+def presentation_owners(request):
     owners = User.objects.filter(id__in=filter_by_access(request.user,
                                                          Presentation.objects.filter(
                                                             Presentation.published_Q(owner=request.user))).values('owner'))
@@ -157,7 +165,7 @@ def presentation_owners(request):
 
 
 @json_view
-def presentations(request, owner=None):    
+def presentations(request, owner=None):
     q = Q(owner__id=owner) if owner else Q()
     pres = filter_by_access(request.user, Presentation.objects.filter(q, Presentation.published_Q(owner=request.user))).order_by('title')
     return {
@@ -194,13 +202,13 @@ def presentation_password(request, id):
 
 @cache_control(no_cache=True)
 @json_view
-def presentation_detail(request, id):    
+def presentation_detail(request, id):
     p = Presentation.get_by_id_for_request(id, request)
     if not p:
         return dict(result='error')
-    
+
     flash = request.GET.get('flash') == '1'
-    
+
     # Propagate the flash URL paramater into all image URLs to control the "Vary: cookie" header
     # that breaks caching in Flash/Firefox.  Also add the username from the request to make sure
     # different users don't use each other's cached images.
@@ -210,7 +218,7 @@ def presentation_detail(request, id):
             u = u + ('&' if u.find('?') > -1 else '?') \
                   + ('flash=1&user=%s' % (request.user.id if request.user.is_authenticated() else -1))
         return u
-    
+
     return dict(id=p.id,
                 name=p.name,
                 title=p.title,
@@ -228,9 +236,9 @@ def presentation_detail(request, id):
 @json_view
 def keep_alive(request):
     return dict(user=request.user.username if request.user else '')
-    
-    
-@cache_control(no_cache=True)        
+
+
+@cache_control(no_cache=True)
 def autocomplete_user(request):
     query = request.GET.get('q', '').lower()
     try:
@@ -246,7 +254,7 @@ def autocomplete_user(request):
     return HttpResponse(content='\n'.join(users))
 
 
-@cache_control(no_cache=True)        
+@cache_control(no_cache=True)
 def autocomplete_group(request):
     query = request.GET.get('q', '').lower()
     try:

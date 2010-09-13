@@ -1,6 +1,12 @@
 *.pyc
+*.pyo
 rooibos/settings_local.py
 solr/logs/
 solr/solr/data/
 apps/
+scratch/
 rooibos/*/migrations/
+solr/wrapper.*
+solr/wrapper-license.conf
+config.xml
+CACHE
