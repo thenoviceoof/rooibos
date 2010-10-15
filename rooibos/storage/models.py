@@ -10,16 +10,24 @@ import uuid
 from rooibos.contrib.ipaddr import IP
 from rooibos.util import unique_slug, cached_property, clear_cached_properties
 from rooibos.data.models import Record
-from rooibos.access import sync_access
+from rooibos.access import sync_access, get_effective_permissions_and_restrictions
 import multimedia
 
 class Storage(models.Model):
     title = models.CharField(max_length=100)
     name = models.SlugField(max_length=50)
     system = models.CharField(max_length=50)
-    base = models.CharField(max_length=1024, null=True)
-    urlbase = models.CharField(max_length=1024, null=True, blank=True, verbose_name='URL base')
-    serverbase = models.CharField(max_length=1024, null=True, blank=True, verbose_name='server base')
+    base = models.CharField(max_length=1024, null=True,
+                            help_text="Absolute path to server directory containing files.")
+    urlbase = models.CharField(max_length=1024, null=True, blank=True, verbose_name='URL base',
+                               help_text="URL at which stored file is available, e.g. through streaming. " +
+                               "May contain %(filename)s placeholder, which will be replaced with the media url property.")
+    deliverybase = models.CharField(db_column='serverbase', max_length=1024,
+                                    null=True, blank=True, verbose_name='server base',
+                                    help_text="Absolute path to server directory in which a temporary symlink " +
+                                    "to the actual file should be created when the file is requested e.g. for " +
+                                    "streaming.")
+    # This field is no longer used
     derivative = models.OneToOneField('self', null=True, related_name='master')
 
     class Meta:
@@ -30,11 +38,6 @@ class Storage(models.Model):
         super(Storage, self).save(kwargs)
 
     def __unicode__(self):
-        try:
-            if self.master:
-                return self.name + " (derivative)"
-        except:
-            pass
         return self.name
 
     @property
@@ -48,13 +51,20 @@ class Storage(models.Model):
             return classobj(base=self.base)
         else:
             return None
-        
+
     def get_absolute_url(self):
         return reverse('storage-manage-storage', args=(self.id, self.name))
 
     def get_absolute_media_url(self, media):
         storage = self.storage_system
         return storage and storage.get_absolute_media_url(self, media) or None
+
+    def get_delivery_media_url(self, media):
+        storage = self.storage_system
+        url = None
+        if hasattr(storage, 'get_delivery_media_url'):
+            url = storage.get_delivery_media_url(self, media)
+        return url or self.get_absolute_media_url(media)
 
     def get_absolute_file_path(self, media):
         storage = self.storage_system
@@ -81,21 +91,9 @@ class Storage(models.Model):
         storage = self.storage_system
         return storage and storage.size(name) or None
 
-    def get_derivative_storage(self):
-        if not self.derivative:
-            d = Storage.objects.create(title=self.title,
-                                       system='local',
-                                       base=os.path.join(settings.SCRATCH_DIR, self.name))
-            updated = Storage.objects.filter(id=self.id, derivative=None).update(derivative=d)
-            if updated != 1:
-                # Race condition, some other thread just created a derivative also
-                d.delete()
-                return Storage.objects.get(master=self)
-            else:
-                self.derivative = Storage.objects.get(master=self)
-                sync_access(self, self.derivative)
-        return self.derivative
-    
+    def get_derivative_storage_path(self):
+        return os.path.join(settings.SCRATCH_DIR, self.name)
+
     def is_local(self):
         return self.storage_system and self.storage_system.is_local()
 
@@ -113,6 +111,7 @@ class Media(models.Model):
     width = models.IntegerField(null=True)
     height = models.IntegerField(null=True)
     bitrate = models.IntegerField(null=True)
+    # This field is no longer used
     master = models.ForeignKey('self', null=True, related_name='derivatives')
 
     class Meta:
@@ -129,6 +128,9 @@ class Media(models.Model):
 
     def get_absolute_url(self):
         return self.storage and self.storage.get_absolute_media_url(self) or self.url
+
+    def get_delivery_url(self):
+        return self.storage and self.storage.get_delivery_media_url(self) or self.url
 
     def get_absolute_file_path(self):
         return self.storage and self.storage.get_absolute_file_path(self) or None
@@ -187,14 +189,25 @@ class Media(models.Model):
             self.bitrate = bitrate
             if save:
                 self.save()
-                
+
     def clear_derivatives(self):
         for m in self.derivatives.all():
             m.delete_file()
         self.derivatives.all().delete()
-        
+
     def is_local(self):
         return self.storage and self.storage.is_local()
+
+    def is_downloadable_by(self, user):
+        r, w, m, restrictions = get_effective_permissions_and_restrictions(user, self.storage)
+        # if size or download restrictions exist, no direct download of a media file is allowed
+        if restrictions and (restrictions.has_key('width') or
+                             restrictions.has_key('height') or
+                             restrictions.get('download', 'yes') == 'no'):
+            return False
+        else:
+            return r
+
 
 
 class TrustedSubnet(models.Model):

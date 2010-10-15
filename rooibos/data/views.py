@@ -82,8 +82,10 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
         context = get_object_or_404(filter_by_access(request.user, model_class), id=contextid)
 
     media = Media.objects.select_related().filter(record=record,
-                                                  storage__id__in=accessible_ids(request.user, Storage),
-                                                  master=None)
+                                                  storage__id__in=accessible_ids(request.user, Storage))
+    # Only list media that is downloadable
+    media = filter(lambda m: m.is_downloadable_by(request.user), media)
+
     edit = edit and request.user.is_authenticated()
 
     class FieldSetForm(forms.Form):
@@ -402,7 +404,7 @@ def data_import_file(request, file):
 
     def analyze(collections=None, separator=None, separate_fields=None, fieldset=None):
         try:
-            with open(os.path.join(_get_scratch_dir(), _get_filename(request, file)), 'rb') as csvfile:
+            with open(os.path.join(_get_scratch_dir(), _get_filename(request, file)), 'rU') as csvfile:
                 imp = SpreadsheetImport(csvfile, collections, separator=separator,
                                         separate_fields=separate_fields, preferred_fieldset=fieldset)
                 return imp, imp.analyze()

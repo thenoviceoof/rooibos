@@ -1,3 +1,4 @@
+from __future__ import with_statement
 from datetime import datetime, timedelta
 from django import forms
 from django.conf import settings
@@ -15,10 +16,10 @@ from django.template.loader import render_to_string
 from django.utils import simplejson
 from django.views.decorators.cache import cache_control
 from models import Media, Storage, TrustedSubnet, ProxyUrl
-from rooibos.access import accessible_ids, accessible_ids_list, filter_by_access, get_effective_permissions_and_restrictions, get_accesscontrols_for_object
+from rooibos.access import accessible_ids, accessible_ids_list, filter_by_access, get_effective_permissions_and_restrictions, get_accesscontrols_for_object, check_access
 from rooibos.contrib.ipaddr import IP
 from rooibos.data.models import Collection, Record, Field, FieldValue, CollectionItem, standardfield
-from rooibos.storage import get_image_for_record, get_thumbnail_for_record, match_up_media
+from rooibos.storage import get_media_for_record, get_image_for_record, get_thumbnail_for_record, match_up_media, analyze_media, analyze_records
 from rooibos.util import json_view
 import logging
 import os
@@ -30,8 +31,6 @@ import mimetypes
 
 
 def add_content_length(func):
-    # Disable to make it work with latest PyISAPIe
-    return func
     def _add_header(request, *args, **kwargs):
         response = func(request, *args, **kwargs)
         if type(response) == HttpResponse:
@@ -43,33 +42,22 @@ def add_content_length(func):
 @add_content_length
 @cache_control(private=True, max_age=3600)
 def retrieve(request, recordid, record, mediaid, media):
-
     # check if media exists
-    mediaobj = get_object_or_404(Media.objects.filter(id=mediaid, record__id=recordid))
+    mediaobj = get_media_for_record(recordid, request.user).filter(id=mediaid)
 
-    # check permissions
-    try:
-        mediaobj = Media.objects.get(id=mediaid,
-                                 record__id=recordid,
-                                 record__collection__id__in=accessible_ids(request.user, Collection),
-                                 storage__id__in=accessible_ids(request.user, Storage))
-    except Media.DoesNotExist:
+    # check download status
+    if not mediaobj or not mediaobj[0].is_downloadable_by(request.user):
         return HttpResponseForbidden()
 
-    r, w, m, restrictions = get_effective_permissions_and_restrictions(request.user, mediaobj.storage)
-    # if size restrictions exist, no direct download of a media file is allowed
-    if restrictions and (restrictions.has_key('width') or restrictions.has_key('height')):
-        raise Http404()
-
     try:
-        content = mediaobj.load_file()
+        content = mediaobj[0].load_file()
     except IOError:
         raise Http404()
 
     if content:
-        return HttpResponse(content=content, mimetype=str(mediaobj.mimetype))
+        return HttpResponse(content=content, mimetype=str(mediaobj[0].mimetype))
     else:
-        return HttpResponseRedirect(mediaobj.get_absolute_url())
+        return HttpResponseRedirect(mediaobj[0].get_absolute_url())
 
 
 @add_content_length
@@ -79,24 +67,23 @@ def retrieve_image(request, recordid, record, width=None, height=None):
     width = int(width or '100000')
     height = int(height or '100000')
 
-    media = get_image_for_record(recordid, request.user, width, height)
-
-    if not media:
+    path = get_image_for_record(recordid, request.user, width, height)
+    if not path:
         raise Http404()
 
-    # return resulting image
-    content = media.load_file()
-    if content:
-        return HttpResponse(content=content, mimetype=str(media.mimetype))
-    else:
-        return HttpResponseServerError()
+    try:
+        return HttpResponse(content=file(path, 'rb').read(), mimetype='image/jpeg')
+    except IOError:
+        logging.error("IOError: %s" % path)
+        raise Http404()
+
 
 
 @login_required
 def media_upload(request, recordid, record):
-    available_storage = get_list_or_404(filter_by_access(request.user, Storage.objects.filter(master=None), write=True
+    available_storage = get_list_or_404(filter_by_access(request.user, Storage, write=True
                                          ).values_list('name','title'))
-    record = Record.get_or_404(id, request.user)
+    record = Record.get_or_404(recordid, request.user)
 
     class UploadFileForm(forms.Form):
         storage = forms.ChoiceField(choices=available_storage)
@@ -136,15 +123,13 @@ def media_upload(request, recordid, record):
 @cache_control(private=True, max_age=3600)
 def record_thumbnail(request, id, name):
     record = Record.get_or_404(id, request.user)
-    media = get_thumbnail_for_record(record, request.user, crop_to_square=request.GET.has_key('square'))
-    if media:
+    filename = get_thumbnail_for_record(record, request.user, crop_to_square=request.GET.has_key('square'))
+    if filename:
         try:
-            content = media.load_file()
-            if content:
-                return HttpResponse(content=content, mimetype=str(media.mimetype))
-        except IOError, ex:
-            pass
-    return HttpResponseRedirect(reverse('static', args=['images/thumbnail_unavailable.png']))
+            return HttpResponse(content=open(filename, 'rb').read(), mimetype='image/jpeg')
+        except IOError:
+            logging.error("IOError: %s" % filename)
+    return HttpResponseRedirect(reverse('static', args=('images/thumbnail_unavailable.png',)))
 
 
 @json_view
@@ -197,6 +182,9 @@ def call_proxy_url(request, uuid):
 def manage_storages(request):
 
     storages = filter_by_access(request.user, Storage, manage=True).order_by('title')
+
+    for s in storages:
+        s.analysis_available = hasattr(s, 'get_files')
 
     return render_to_response('storage_manage.html',
                           {'storages': storages,
@@ -255,7 +243,7 @@ def manage_storage(request, storageid=None, storagename=None):
 @login_required
 def import_files(request):
 
-    available_storage = get_list_or_404(filter_by_access(request.user, Storage.objects.filter(master=None), write=True).order_by('title').values_list('id', 'title'))
+    available_storage = get_list_or_404(filter_by_access(request.user, Storage, write=True).order_by('title').values_list('id', 'title'))
     available_collections = get_list_or_404(filter_by_access(request.user, Collection))
     writable_collection_ids = accessible_ids_list(request.user, Collection, write=True)
 
@@ -383,7 +371,7 @@ def import_files(request):
 
 @login_required
 def match_up_files(request):
-    available_storage = get_list_or_404(filter_by_access(request.user, Storage.objects.filter(master=None), manage=True).order_by('title').values_list('id', 'title'))
+    available_storage = get_list_or_404(filter_by_access(request.user, Storage, manage=True).order_by('title').values_list('id', 'title'))
     available_collections = get_list_or_404(filter_by_access(request.user, Collection, manage=True))
 
     class MatchUpForm(forms.Form):
@@ -421,5 +409,55 @@ def match_up_files(request):
 
     return render_to_response('storage_match_up_files.html',
                               {'form': form,
+                               },
+                              context_instance=RequestContext(request))
+
+
+@login_required
+def analyze(request, id, name):
+    storage = get_object_or_404(filter_by_access(request.user, Storage.objects.filter(id=id), manage=True))
+    broken, extra = analyze_media(storage)
+    return render_to_response('storage_analyze.html',
+                          {'storage': storage,
+                           'broken': broken,
+                           'extra': extra,
+                           },
+                          context_instance=RequestContext(request))
+
+
+@login_required
+def find_records_without_media(request):
+    available_storage = get_list_or_404(filter_by_access(request.user, Storage, manage=True).order_by('title').values_list('id', 'title'))
+    available_collections = get_list_or_404(filter_by_access(request.user, Collection, manage=True))
+
+    class SelectionForm(forms.Form):
+        collection = forms.ChoiceField(choices=((c.id, c.title) for c in sorted(available_collections, key=lambda c: c.title)))
+        storage = forms.ChoiceField(choices=available_storage)
+
+    identifiers = records = []
+    analyzed = False
+
+    if request.method == 'POST':
+
+        form = SelectionForm(request.POST)
+        if form.is_valid():
+
+            collection = get_object_or_404(filter_by_access(request.user, Collection.objects.filter(id=form.cleaned_data['collection']), manage=True))
+            storage = get_object_or_404(filter_by_access(request.user, Storage.objects.filter(id=form.cleaned_data['storage']), manage=True))
+
+            records = analyze_records(collection, storage)
+            analyzed = True
+
+            identifiers = FieldValue.objects.filter(field__in=standardfield('identifier', equiv=True),
+                                                    record__in=records).order_by('value').values_list('value', flat=True)
+
+    else:
+        form = SelectionForm(request.GET)
+
+    return render_to_response('storage_find_records_without_media.html',
+                              {'form': form,
+                               'identifiers': identifiers,
+                               'records': records,
+                               'analyzed': analyzed,
                                },
                               context_instance=RequestContext(request))

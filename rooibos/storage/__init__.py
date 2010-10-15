@@ -7,11 +7,39 @@ import os
 from django.conf import settings
 from django.db import connection
 from django.db.models import Q, F
-from rooibos.access import accessible_ids, get_effective_permissions_and_restrictions
+from rooibos.access import accessible_ids, get_effective_permissions_and_restrictions, add_restriction_precedence
 from rooibos.data.models import Collection, Record, standardfield
-from rooibos.presentation.models import Presentation
 from models import Media, Storage
 
+
+try:
+    # Derivative storage no longer used, remove all from database
+    # Due to dependencies, need to delete them individually after removing the derivative connections
+    storage_ids = list(Media.objects.filter(master__isnull=False).values_list('storage__id', flat=True).distinct())
+    storage_ids.extend(Storage.objects.exclude(id__in=Media.objects.all().values('storage__id'))
+                                      .filter(base__startswith='d:/mdid/scratch/').values_list('id', flat=True))
+    for storage in Storage.objects.filter(master__isnull=False).exclude(id__in=storage_ids):
+        storage_ids.append(storage.id)
+    for storage in Storage.objects.filter(id__in=storage_ids):
+        try:
+            storage.master.derivative = None
+            storage.master.save()
+        except Storage.DoesNotExist:
+            pass
+    for storage in Storage.objects.filter(id__in=storage_ids):
+        storage.delete()
+except Exception, ex:
+    # Clean up failed, log exception and continue
+    logging.error("Derivative storage cleanup failed: %s" % ex)
+    pass
+
+def download_precedence(a, b):
+    if a == 'yes' or b == 'yes':
+        return 'yes'
+    if a == 'only' or b == 'only':
+        return 'only'
+    return 'no'
+add_restriction_precedence('download', download_precedence)
 
 mimetypes.init([os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'mime.types'))])
 
@@ -46,6 +74,7 @@ def get_media_for_record(record, user=None, passwords={}):
 
     # get available media objects
     # Has access to collection containing record and to storage containing media
+    from rooibos.presentation.models import Presentation
     media = Media.objects.filter(
         Q(record__collection__id__in=accessible_ids(user, Collection)) # record is accessible
         | ownercheck # or record is accessible via owner
@@ -61,7 +90,7 @@ def get_media_for_record(record, user=None, passwords={}):
     return media
 
 
-def get_image_for_record(record, user=None, width=100000, height=100000, passwords={}, crop_to_square=False, force_local=False):
+def get_image_for_record(record, user=None, width=100000, height=100000, passwords={}, crop_to_square=False):
 
     media = get_media_for_record(record, user, passwords)
 
@@ -70,7 +99,7 @@ def get_image_for_record(record, user=None, width=100000, height=100000, passwor
         # also support video and audio
          q = q | Q(mimetype__startswith='video/') | Q(mimetype__startswith='audio/')
 
-    media = media.filter(q, master=None) # don't look for derivatives here
+    media = media.filter(q)
 
     if not media:
         return None
@@ -102,9 +131,12 @@ def get_image_for_record(record, user=None, width=100000, height=100000, passwor
         height = min(height, restrictions.get('height', height))
 
     # see if image needs resizing
-    if m.width > width or m.height > height or m.mimetype != 'image/jpeg' or (force_local and not m.is_local()):
+    if m.width > width or m.height > height or m.mimetype != 'image/jpeg' or not m.is_local():
 
         def derivative_image(master, width, height):
+            if not master.file_exists():
+                logging.error('Image derivative failed for media %d, cannot find file' % master.id)
+                return None, (None, None)
             import ImageFile
             ImageFile.MAXBLOCK = 16 * 1024 * 1024
             from multimedia import get_image
@@ -120,39 +152,34 @@ def get_image_for_record(record, user=None, width=100000, height=100000, passwor
                 image.thumbnail((width, height), Image.ANTIALIAS)
                 output = StringIO.StringIO()
                 image.save(output, 'JPEG', quality=85, optimize=True)
-                return output, image.size
+                return output.getvalue(), image.size
             except Exception, e:
-                logging.error('Could not create derivative image, exception: %s' % e)
+                logging.error('Image derivative failed for media %d (%s)' % (master.id, e))
                 return None, (None, None)
 
         # See if a derivative already exists
-        d = m.derivatives.filter(Q(width=width, height__lte=height) | Q(width__lte=width, height=height),
-                                 # find a square derivative if requested, or if source is square,
-                                 # otherwise look for a non-square (i.e. something matching the original aspect ratio)
-                                 Q(width=F('height')) if crop_to_square or m.width == m.height else ~Q(width=F('height')),
-                                 mimetype='image/jpeg')
-        if d:
-            # use derivative
-            d = d[0]
-            if not d.file_exists():
-                # file has been removed, recreate
+        name = '%s-%sx%s%s.jpg' % (m.id, width, height, 'sq' if crop_to_square else '')
+        sp = m.storage.get_derivative_storage_path()
+        if sp:
+            if not os.path.exists(sp):
+                os.makedirs(sp)
+            path = os.path.join(sp, name)
+
+            if not os.path.exists(path) or os.path.getsize(path) == 0:
                 output, (w, h) = derivative_image(m, width, height)
-                if not output:
+                if output:
+                    with file(path, 'wb') as f:
+                        f.write(output)
+                else:
                     return None
-                d.save_file('%s-%sx%s.jpg' % (d.id, w, h), output)
-            m = d
+
+            return path
         else:
-            # create new derivative with correct size
-            output, (w, h) = derivative_image(m, width, height)
-            if not output:
-                return None
-            storage = m.storage.get_derivative_storage()
-            m = Media.objects.create(record=m.record, storage=storage, mimetype='image/jpeg',
-                                     width=w, height=h, master=m)
-            m.save_file('%s-%sx%s.jpg' % (m.id, w, h), output)
+            return None
 
-    return m
+    else:
 
+        return m.get_absolute_file_path()
 
 
 def get_thumbnail_for_record(record, user=None, crop_to_square=False):
@@ -160,20 +187,7 @@ def get_thumbnail_for_record(record, user=None, crop_to_square=False):
 
 
 def match_up_media(storage, collection):
-
-    if not hasattr(storage, 'get_files'):
-        return []
-
-    # get list of files
-    files = storage.get_files()
-
-    # remove files that already have media objects
-    for media in Media.objects.filter(storage=storage):
-        try:
-            files.remove(os.path.normpath(media.url))
-        except ValueError:
-            pass
-
+    broken, files = analyze_media(storage)
     # find records that have an ID matching one of the remaining files
     idfields = standardfield('identifier', equiv=True)
     results = []
@@ -184,5 +198,31 @@ def match_up_media(storage, collection):
         records = Record.by_fieldvalue(idfields, (id, filename)).filter(collection=collection, owner=None)
         if len(records) == 1:
             results.append((records[0], file))
-
     return results
+
+
+def analyze_records(collection, storage):
+    # find empty records, i.e. records that don't have any media in the given storage
+    return collection.records.exclude(id__in=collection.records.filter(media__storage=storage).values('id'))
+
+
+def analyze_media(storage):
+    broken = []
+    extra = []
+    # Storage must be able to provide file list
+    if hasattr(storage, 'get_files'):
+        # Find extra files, i.e. files in the storage area that don't have a matching media record
+        files = storage.get_files()
+        # convert to dict for faster lookup
+        extra = dict(zip(files, [None] * len(files)))
+        # Find broken media, i.e. media that does not have a related file on the file system
+        for media in Media.objects.filter(storage=storage):
+            url = os.path.normcase(os.path.normpath(media.url))
+            if extra.has_key(url):
+                # File is in use
+                del extra[url]
+            else:
+                # missing file
+                broken.append(media)
+        extra = extra.keys()
+    return broken, extra
