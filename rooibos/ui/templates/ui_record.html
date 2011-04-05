@@ -14,5 +14,8 @@
     {% else %}
     <img src="{% url static 'images/locked.png' %}" alt="Not shared" title="Not shared" class="shared-icon" />
     {% endif %}
+    {% if record.related_items_ids %}
+        <a href=""><img src="{% url static 'images/related.png' %}" alt="Find related" title="Find related" class="related-icon" /></a>
+    {% endif %}
     {% endif %}
 </div>

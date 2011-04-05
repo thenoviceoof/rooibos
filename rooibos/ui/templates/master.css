@@ -1033,6 +1033,13 @@ div.fieldvalue-edit div.narrow input {
     border: none !important;
 }
 
+.related-icon {
+    position: absolute;
+    bottom: 20px;
+    right: 2px;
+    border: none !important;
+}
+
 #external-results {
     display: none;
 }

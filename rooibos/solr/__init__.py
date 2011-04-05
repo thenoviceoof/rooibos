@@ -11,6 +11,7 @@ from rooibos.util.models import OwnedWrapper
 from rooibos.contrib.tagging.models import Tag, TaggedItem
 from pysolr import Solr
 from rooibos.util.progressbar import ProgressBar
+from rooibos.presentation.functions import get_related_items
 
 SOLR_EMPTY_FIELD_VALUE = 'unspecified'
 
@@ -22,14 +23,21 @@ class SolrIndex():
 
     def search(self, q, sort=None, start=None, rows=None, facets=None, facet_limit=-1, facet_mincount=0, fields=None):
         if not fields:
-            fields = ['id']
-        elif not 'id' in fields:
+            fields = []
+        if not 'id' in fields:
             fields.append('id')
+        if not 'relateditems' in fields:
+            fields.append('relateditems')
         conn = Solr(settings.SOLR_URL)
         result = conn.search(q, sort=sort, start=start, rows=rows,
                              facets=facets, facet_limit=facet_limit, facet_mincount=facet_mincount, fields=fields)
         ids = [int(r['id']) for r in result]
         records = Record.objects.in_bulk(ids)
+        for r in result:
+            record = records.get(int(r['id']))
+            relateditems = r.get('relateditems')
+            if record and relateditems:
+                record.related_items_ids = map(int, relateditems.split(','))
         return (result.hits, filter(None, map(lambda i: records.get(i), ids)), result.facets)
 
     def clear(self):
@@ -51,8 +59,10 @@ class SolrIndex():
         batch_size = 500
         process_thread = None
         if all:
+            related_items = get_related_items(verbose=verbose)
             total_count = Record.objects.count()
         else:
+            related_items = {}
             processed_updates = []
             to_update = []
             to_delete = []
@@ -87,8 +97,9 @@ class SolrIndex():
                 def process():
                     docs = []
                     for record in Record.objects.filter(id__in=record_ids):
-                        docs += [self._record_to_solr(record, core_fields, groups.get(record.id, []),
-                                                      fieldvalues.get(record.id, []), media.get(record.id, []))]
+                        docs.append(self._record_to_solr(record, core_fields, groups.get(record.id, []),
+                                                      fieldvalues.get(record.id, []), media.get(record.id, []),
+                                                      related_items.get(record.id)))
                     conn.add(docs)
                 return process
 
@@ -147,7 +158,7 @@ class SolrIndex():
             dict.setdefault(x.record_id, []).append(x)
         return dict
 
-    def _record_to_solr(self, record, core_fields, groups, fieldvalues, media):
+    def _record_to_solr(self, record, core_fields, groups, fieldvalues, media, related):
         required_fields = dict((f.name, None) for f in core_fields.keys())
         doc = { 'id': str(record.id) }
         for v in fieldvalues:
@@ -181,6 +192,9 @@ class SolrIndex():
             for tag in ownedwrapper.taggeditem.select_related('tag').all().values_list('tag__name', flat=True):
                 doc.setdefault('tag', []).append(tag)
                 doc.setdefault('ownedtag', []).append('%s-%s' % (ownedwrapper.user.id, tag))
+        # related items
+        if related:
+            doc['relateditems'] = ','.join(map(str, related))
         return doc
 
     def _clean_string(self, s):

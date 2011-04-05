@@ -285,7 +285,9 @@
    <field name="tag"  type="string"  indexed="true"  stored="true" multiValued="true"/>
    <field name="ownedtag"  type="string"  indexed="true"  stored="false" multiValued="true"/>
    <copyField source="tag" dest="text"/>
-
+   
+   <field name="relateditems" type="string" indexed="false" stored="true" multiValued="false"/>
+   
    <!-- uncomment the following to ignore any fields that don't already match an existing 
         field name or dynamic field, rather than reporting them as an error. 
         alternately, change the type="ignored" to some other type e.g. "text" if you want 
