@@ -13,3 +13,6 @@ CACHE
 rooibos/static/flowplayer/flowplayer.commercial*
 rooibos/static/cache/*
 2*M.mysql
+
+mdid-collections/*
+mdid-scratch/*
