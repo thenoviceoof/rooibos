@@ -614,3 +614,12 @@ def manage_collection(request, id=None, name=None):
                            'can_delete': collection.id and (request.user.is_superuser or collection.owner == request.user),
                           },
                           context_instance=RequestContext(request))
+
+@login_required
+def reindex(request):
+    if not(request.user.is_superuser):
+        return HttpResponseRedirect("/")
+    from rooibos.solr import SolrIndex
+    solr = SolrIndex()
+    solr.index()
+    return render_to_response('data_reindex.html')
