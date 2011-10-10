@@ -166,6 +166,7 @@ YAHOO_APPLICATION_ID = ""
 # servers (e.g. Wowza) don't deliver those, so hard links are required.
 HARD_VIDEO_DELIVERY_LINKS = False
 
+UPLOAD_LIMIT = 1024*1024 # upload limit in kb
 
 additional_settings = [
 #    'apps.jmutube.settings_local',
