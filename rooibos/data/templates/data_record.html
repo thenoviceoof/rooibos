@@ -236,6 +236,12 @@ Display metadata as: {{ fieldsetform.fieldset }}
 
 <div>
     {% metadata record fieldset %}
+    <div class='metadata'>
+        <div class='metadata-item'>
+            <div class='label'>Image:</div>
+            <div class='value'><a target="_blank" href="{% url storage-retrieve-image-nosize record.id, record.name %}?forcedl">Download Image</a></div>
+        </div>
+    </div>
 </div>
 
 <br style="clear: left;" /><br />
