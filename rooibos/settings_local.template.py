@@ -95,6 +95,10 @@ AUTHENTICATION_BACKENDS = (
 #    'rooibos.auth.mailauth.PopAuthenticationBackend',
 )
 
+TEMPLATE_CONTEXT_PROCESSORS = (
+    # 'rooibos.context_processors.anonymous_user_setting',
+)
+
 MIDDLEWARE_CLASSES = (
     'rooibos.auth.middleware.BasicAuthenticationMiddleware',
     # 'rooibos.middleware.AnonymousDomainMiddleware',
