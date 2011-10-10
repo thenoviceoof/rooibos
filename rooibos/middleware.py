@@ -56,3 +56,39 @@ class HistoryMiddleware:
             if not h.startswith(to_before):
                 return h
         return default
+
+###
+from django.contrib.auth.models import User
+import re
+import socket
+
+class AnonymousDomainMiddleware:
+    """If traffic is coming from a trusted domain, then auto sign in as an anonymous user
+    Set this user is settings_local.py, as ANONYMOUS_DOMAIN_USER
+    Try to use a username that is sufficiently unique
+    """
+    def process_request(self, request):
+        log = logging.getLogger(__name__)
+
+        user = request.user
+        if not(user.is_authenticated()) and request:
+            # check if they're in the trusted network
+            remote = request.META["REMOTE_ADDR"]
+            log.debug("Remote: "+remote)
+            try:
+                host = socket.gethostbyaddr(remote)[0]
+                log.debug("Host: "+host)
+                if re.match(".*%s$" % settings.ANONYMOUS_DOMAIN,host):
+                    user_name = settings.ANONYMOUS_DOMAIN_USER
+                    user = User.objects.filter(username=user_name)
+                    if len(user)>0:
+                        user = user[0]
+                    else:
+                        user = request.user
+            except socket.herror:
+                log.debug("No host associated")
+                pass
+        request.user = user
+        log.debug("User: "+str(user))
+        return None
+###

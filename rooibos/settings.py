@@ -49,6 +49,9 @@ TEMPLATE_CONTEXT_PROCESSORS = (
     "django.core.context_processors.request",
     "rooibos.context_processors.settings",
     "rooibos.context_processors.selected_records",
+    ###
+    'rooibos.context_processors.anonymous_user_setting',
+    ###
 )
 
 MIDDLEWARE_CLASSES = (

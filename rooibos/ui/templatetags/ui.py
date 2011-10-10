@@ -81,6 +81,10 @@ def owned_tags_for_object(parser, token):
 
 @register.inclusion_tag('ui_tagging_form.html', takes_context=True)
 def add_tags_form(context, object, tag=None, label=None):
+    ###
+    if not(context['request'].user.has_perm("tagging.add_tag")):
+        return {}
+    ###
     return {'object_id': object.id,
             'object_type': ContentType.objects.get_for_model(object.__class__).id,
             'tag': tag,

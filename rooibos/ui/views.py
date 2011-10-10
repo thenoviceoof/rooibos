@@ -74,6 +74,10 @@ def select_record(request):
 
 @login_required
 def add_tags(request, type, id):
+    ###
+    if not(request.user.has_perm("tagging.add_tag")):
+        return HttpResponseRedirect(request.GET.get('next') or '/')
+    ###
     if request.method <> 'POST':
         return HttpResponseNotAllowed(['POST'])
     tags = request.POST.get('tags')

@@ -23,3 +23,6 @@ def selected_records(request):
         'selected_records_count': len(selected),
         'selected_records': records,
     }
+
+def anonymous_user_setting(request):
+    return {"ANONYMOUS_DOMAIN_USER": _settings.ANONYMOUS_DOMAIN_USER}

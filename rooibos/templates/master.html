@@ -90,7 +90,7 @@
 {% block header %}
     <div id="topmenu">
         <ul>
-            {% if user.is_authenticated %}
+            {% if user.is_authenticated and user.username != ANONYMOUS_DOMAIN_USER %}
             <li>Welcome{% if user.first_name %}, {{ user.first_name }}{% endif %}</li>
             <li><a href="{% url logout %}?next={% url main %}">Log out</a></li>
             <li><a href="{% url ui-options %}">Options</a></li>

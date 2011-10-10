@@ -424,7 +424,6 @@ def search(request, id=None, name=None, selected=False, json=False):
 
 @json_view
 def search_facets(request, id=None, name=None, selected=False):
-
     collection = id and get_object_or_404(filter_by_access(request.user, Collection), id=id) or None
 
     # get parameters relevant for search
@@ -540,9 +539,7 @@ def browse(request, id=None, name=None):
 
 
 def overview(request):
-
     collections = filter_by_access(request.user, Collection).order_by('title').annotate(num_records=Count('records'))
-
     return render_to_response('overview.html',
                               {'collections': collections,},
                               context_instance=RequestContext(request))
@@ -552,6 +549,7 @@ def fieldvalue_autocomplete(request):
     collection_ids = request.GET.get('collections')
     q = collection_ids and Collection.objects.filter(id__in=collection_ids.split(',')) or Collection
     collections = filter_by_access(request.user, q)
+
     if not collections:
         raise Http404()
     query = request.GET.get('q', '').lower()
@@ -566,8 +564,8 @@ def fieldvalue_autocomplete(request):
 
 
 def search_form(request):
-
     collections = filter_by_access(request.user, Collection)
+
     if not collections:
         raise Http404()
 
