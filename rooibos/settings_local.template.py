@@ -97,6 +97,7 @@ AUTHENTICATION_BACKENDS = (
 
 MIDDLEWARE_CLASSES = (
     'rooibos.auth.middleware.BasicAuthenticationMiddleware',
+    # 'rooibos.middleware.AnonymousDomainMiddleware',
 )
 
 LDAP_AUTH = (
@@ -172,3 +173,9 @@ additional_settings = [
 #    'apps.jmutube.settings_local',
 #    'apps.svohp.settings_local',
 ]
+
+# if you have AnonymousDomainMiddleware enabled
+# fill these out with the appropriate values
+# domain is matched with ^%s$, user is exact match
+ANONYMOUS_DOMAIN = ""
+ANONYMOUS_DOMAIN_USER = ""
