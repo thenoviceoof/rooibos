@@ -466,7 +466,7 @@ def data_import_file(request, file):
                 j = JobInfo.objects.create(owner=request.user,
                                        func='csvimport',
                                        arg=simplejson.dumps(dict(
-                                                file=_get_filename(request, file),
+                                                file=os.path.join(_get_scratch_dir(), _get_filename(request, file)),
                                                 separator=form.cleaned_data['separator'],
                                                 collections=map(int, form.cleaned_data['collections']),
                                                 update=form.cleaned_data['update'],
