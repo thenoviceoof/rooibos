@@ -14,6 +14,7 @@ from rooibos.util import unique_slug
 from rooibos.util.caching import get_cached_value, cache_get, cache_get_many, cache_set, cache_set_many
 import logging
 import random
+import re
 
 
 class Collection(models.Model):
@@ -187,6 +188,22 @@ class Record(models.Model):
 
     def get_image_url(self):
         return reverse('storage-retrieve-image-nosize', kwargs={'recordid': self.id, 'record': self.name})
+    def get_scaled_image_url(self, size):
+        """Multiplexes on the size argument: thumb and full presets, AxB, A:B, A,B formats"""
+        if size=="thumb":
+            return self.get_thumbnail_url()
+        elif size=="full":
+            return self.get_image_url()
+        if isinstance(size, basestring):
+            # regex the string apart
+            m = re.match(r"(\d{1,5})[x,:](\d{1,5})", size)
+            size = (m.group(1), m.group(2))
+        elif isinstance(size, tuple) or istype(size, list):
+            # make sure the args are strs (?)
+            size = (str(size[0]), str(size[1]))
+        return reverse('storage-retrieve-image',
+                       kwargs={'recordid': self.id, 'record': self.name,
+                               'width': size[0], 'height': size[1]})
 
     def save(self, force_update_name=False, **kwargs):
         unique_slug(self, slug_literal='r-%s' % random.randint(1000000, 9999999),

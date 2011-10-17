@@ -697,7 +697,8 @@
          function preview_dialog(a, img, prev, next, position, total) {
              var dialog = $("#preview-dialog");
              dialog.dialog("destroy").empty();
-             var img_src = img.attr('src').substring(thumb_url.indexOf('/0/0/'));
+	     var img_post = img.attr('src').substring(media_url.indexOf('/0/0/'));
+	     var img_src = img_post.match(/^(\/[\w\-]+\/[\w\-]+\/)/)[1];
              var qs_index = img_src.indexOf('?');
              if (qs_index > 0) img_src = img_src.substring(0, qs_index);
              var url = media_url.replace(/\/0\/0\//, img_src);

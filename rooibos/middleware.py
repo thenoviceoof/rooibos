@@ -73,10 +73,8 @@ class AnonymousDomainMiddleware:
         if not(user.is_authenticated()) and request:
             # check if they're in the trusted network
             remote = request.META["REMOTE_ADDR"]
-            log.debug("Remote: "+remote)
             try:
                 host = socket.gethostbyaddr(remote)[0]
-                log.debug("Host: "+host)
                 if re.match(".*%s$" % settings.ANONYMOUS_DOMAIN,host):
                     user_name = settings.ANONYMOUS_DOMAIN_USER
                     user = User.objects.filter(username=user_name)
@@ -85,8 +83,7 @@ class AnonymousDomainMiddleware:
                     else:
                         user = request.user
             except socket.herror:
-                log.debug("No host associated")
+                log.debug("No host associated with request")
                 pass
         request.user = user
-        log.debug("User: "+str(user))
         return None

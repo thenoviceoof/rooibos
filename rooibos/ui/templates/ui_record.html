@@ -1,5 +1,5 @@
 <div class="record{% if notitle %} notitle{% endif %}">
-    <a href="{{ record.get_absolute_url }}"><img class="thumbnail record-anchor" id="record-id-{{ record.id }}" src="{{ record.get_thumbnail_url }}" alt="{{ record.title }}" /></a>
+    <a href="{{ record.get_absolute_url }}"><img class="record-anchor" id="record-id-{{ record.id }}" src="{{ imgurl }}" alt="{{ record.title }}" /></a>
     {% if not notitle %}
     <div class="record-title"><a href="{{ record.get_absolute_url }}">{{ record.title }}</a></div>
     {% endif %}
@@ -18,5 +18,13 @@
     {% endif %}
     {% if record.solr_presentation_ids %}
     <a href="{% url solr-search %}?c=presentations:{{ record.id }}"><img src="{% url static 'images/related.png' %}" alt="See related [+{{ record.solr_presentation_ids|length }}]" title="See related [+{{ record.solr_presentation_ids|length }}]" class="related-icon" /></a>
+    {% endif %}
+    {% if viewmode != "thumb" %}
+    <style>
+      #sidebar { width:340px; }
+      .record { width:300px; height:200px; }
+      .record.notitle { width:300px; }
+      .record img { max-width:280px; }
+    </style>
     {% endif %}
 </div>

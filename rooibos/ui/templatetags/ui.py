@@ -24,6 +24,7 @@ def record(context, record, selectable=False, viewmode="thumb", notitle=False):
             'notitle': notitle,
             'selectable': selectable,
             'selected': record.id in context['request'].session.get('selected_records', ()),
+            'imgurl': record.get_scaled_image_url(viewmode),
             'viewmode': viewmode,
             'request': context['request'],
             }
