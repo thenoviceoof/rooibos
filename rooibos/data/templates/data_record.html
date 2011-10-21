@@ -88,7 +88,7 @@ $(document).ready(function() {
 </div>
 {% endif %}
 
-{% if request.user.is_authenticated and record.id %}
+{% if request.user.is_authenticated and record.id and can_edit %}
 <div class="facet active-facet" id="data_record_editing">
     <div class="facet-header">Editing</div>
     <div class="facet-body">

@@ -71,7 +71,7 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
 
     writable_collections = list(accessible_ids(request.user, Collection, write=True))
     readable_collections = list(accessible_ids(request.user, Collection))
-    can_edit = request.user.is_authenticated()
+    can_edit = request.user.is_authenticated() and request.user.has_perm("data.change_record")
 
     if id and name:
         record = Record.get_or_404(id, request.user)
