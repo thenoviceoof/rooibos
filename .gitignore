@@ -14,3 +14,5 @@ solr/wrapper-license.conf
 config.xml
 CACHE
 rooibos/static/flowplayer/flowplayer.commercial*
+rooibos/static/cache/*
+2*M.mysql
