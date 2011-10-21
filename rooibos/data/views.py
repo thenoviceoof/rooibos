@@ -26,6 +26,7 @@ from rooibos.userprofile.views import load_settings, store_settings
 from rooibos.util import json_view
 from rooibos.workers.models import JobInfo
 from spreadsheetimport import SpreadsheetImport
+from rooibos.storage import get_media_for_record, get_image_for_record
 import os
 import random
 import string
@@ -75,6 +76,13 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
 
     if id and name:
         record = Record.get_or_404(id, request.user)
+
+        # if the user can't see the image, then don't let them see the record
+        passwords = request.session.get('passwords', dict())
+        media = get_media_for_record(record, request.user, passwords)
+        if not media:
+            raise Http404()
+
         can_edit = can_edit and record.editable_by(request.user)
     else:
         if request.user.is_authenticated() and (writable_collections or (personal and readable_collections)):
