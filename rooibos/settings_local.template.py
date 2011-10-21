@@ -183,3 +183,6 @@ additional_settings = [
 # domain is matched with ^%s$, user is exact match
 ANONYMOUS_DOMAIN = ""
 ANONYMOUS_DOMAIN_USER = ""
+
+# largest dimension to show to users without appropriate permissions
+PROLE_SIZE_LIMIT = False

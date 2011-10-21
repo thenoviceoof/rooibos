@@ -70,6 +70,10 @@ def retrieve(request, recordid, record, mediaid, media):
 @cache_control(private=True, max_age=3600)
 def retrieve_image(request, recordid, record, width=None, height=None):
 
+    if settings.PROLE_SIZE_LIMIT and not(request.user.has_perm('record.view_original')):
+        width  = settings.PROLE_SIZE_LIMIT
+        height = settings.PROLE_SIZE_LIMIT
+
     passwords = request.session.get('passwords', dict())
 
     path = get_image_for_record(recordid, request.user, int(width or 100000), int(height or 100000), passwords)

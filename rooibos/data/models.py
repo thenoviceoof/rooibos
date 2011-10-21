@@ -99,6 +99,11 @@ class Record(models.Model):
     next_update = models.DateTimeField(null=True)
     owner = models.ForeignKey(User, null=True)
 
+    class Meta:
+        permissions = (
+            ("view_original", "Not restricted to PROLE_SIZE_LIMIT size images"),
+            )
+
     @staticmethod
     def filter_by_access(user, *ids):
         records = Record.objects.distinct()
