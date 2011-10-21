@@ -70,7 +70,9 @@ def retrieve(request, recordid, record, mediaid, media):
 @cache_control(private=True, max_age=3600)
 def retrieve_image(request, recordid, record, width=None, height=None):
 
-    if settings.PROLE_SIZE_LIMIT and not(request.user.has_perm('record.view_original')):
+    if (isinstance(settings.PROLE_SIZE_LIMIT, int) and
+        not(request.user.has_perm('record.view_original')) and
+        width is None and height is None):
         width  = settings.PROLE_SIZE_LIMIT
         height = settings.PROLE_SIZE_LIMIT
 
