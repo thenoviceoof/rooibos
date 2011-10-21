@@ -702,21 +702,25 @@
              dialog.dialog("destroy").empty();
 	     var img_post = img.attr('src').substring(media_url.indexOf('/0/0/'));
 	     var img_src = img_post.match(/^(\/[\w\-]+\/[\w\-]+\/)/)[1];
+	     var img_full_src = media_url.substring(0,media_url.indexOf('/0/0/'))+img_src;
              var qs_index = img_src.indexOf('?');
              if (qs_index > 0) img_src = img_src.substring(0, qs_index);
              var url = media_url.replace(/\/0\/0\//, img_src);
              var id = img.attr('id').substring(img.attr('id').lastIndexOf('-') + 1);
              dialog.append($("<img />").attr('src', url));
              var buttons = {
-                     "Close": function() {
-                         $(this).dialog("close");
+                     "Download Image": function() {
+                         window.open(img_full_src);
                      },
                      "Go to Record": function() {
                          window.open(a.attr('href'), 'record_view');
                      },
                      "Select": function() {
                          recordSelection(id, true);
-                     }
+                     },
+                     "Close": function() {
+                         $(this).dialog("close");
+                     },
                  };
              if (prev && prev().length) buttons['Previous'] = function() { prev().click(); };
              if (position && total) buttons[position + '/' + total] = function() {};
