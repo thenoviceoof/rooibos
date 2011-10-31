@@ -31,5 +31,13 @@
 <input type="hidden" name="next" value="{{ next }}" />
 </form>
 
+<!-- ### So terrible! Fix this atrocity -->
+<h1 style="margin-top:0.5em;">OR</h1>
+
+<!-- Do WIND Signin -->
+<form method="post" action="https://wind.columbia.edu/login">
+<input type="hidden" name="destination" value="{{ setting.WIND_LOCATION }}">
+<a href="#">Sign in with your Columbia ID</a>
+</form>
 
 {% endblock %}
