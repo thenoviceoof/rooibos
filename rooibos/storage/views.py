@@ -27,6 +27,7 @@ import logging
 import os
 import uuid
 import mimetypes
+import re
 
 #def expire_header(seconds=3600):
 #    return (datetime.utcnow() + timedelta(0, seconds)).strftime('%a, %d %b %Y %H:%M:%S GMT')
@@ -51,6 +52,13 @@ def retrieve(request, recordid, record, mediaid, media):
     if not mediaobj or not mediaobj[0].is_downloadable_by(request.user):
         return HttpResponseForbidden()
     mediaobj = mediaobj[0]
+
+    # see if it's an image
+    if re.match("^image.*", mediaobj.mimetype):
+        try:
+            return retrieve_image(request, recordid, record)
+        except Http404:
+            pass
 
     try:
         content = mediaobj.load_file()
