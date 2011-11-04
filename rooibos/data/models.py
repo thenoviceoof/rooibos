@@ -202,6 +202,9 @@ class Record(models.Model):
         if isinstance(size, basestring):
             # regex the string apart
             m = re.match(r"(\d{1,5})[x,:](\d{1,5})", size)
+            if not m:
+                # assume thumb if it doesn't match
+                return self.get_thumbnail_url()
             size = (m.group(1), m.group(2))
         elif isinstance(size, tuple) or istype(size, list):
             # make sure the args are strs (?)
