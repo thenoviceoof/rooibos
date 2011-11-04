@@ -2,7 +2,7 @@
 {% var as colors %}
 {
     "background":                   "rgb(229, 225, 214)",
-    "background_top":               "rgb( 83,  82,  78)",
+    "background_top":               "#333333",
     "background_top_gradient":      "rgb(127, 127, 127)",
     "content_background":           "white",
     "content_border_gradient1":     "rgb(201, 198, 188)",
@@ -12,7 +12,7 @@
     "headings":                     "{{ PRIMARY_COLOR }}",
     "topmenu_text":                 "white",
     "dropdownmenu_background":      "rgb(241, 241, 241)",
-    "dropdownmenu_text":            "{{ SECONDARY_COLOR }}",
+    "dropdownmenu_text":            "{{ PRIMARY_COLOR }}",
     "dropdownmenu_separator":       "rgb(230, 230, 230)",
     "menu_text":                    "white",
     "messages":                     "rgb(255, 221,  63)",
@@ -21,7 +21,7 @@
     "basket_text":                  "{{ PRIMARY_COLOR }}",
     "facet":                        "lightgrey",
     "facet_text":                   "black",
-    "facet_active":                 "{{ PRIMARY_COLOR }}",
+    "facet_active":                 "#a4c7e1",
     "facet_active_text":            "white",
     "borders":                      "lightgrey",
     "shaded_background":            "rgb(247, 247, 247)",
@@ -75,7 +75,8 @@ html.js-enabled #javascriptwarning {
 body.master {
     background-color: {{ colors.background }};
     min-width: 970px;
-    font-family: "Segoe UI", Calibri, "Myriad Pro", Tahoma, Helvetica, Arial, sans-serif;
+    /*font-family: "Segoe UI", Calibri, "Myriad Pro", Tahoma, Helvetica, Arial, sans-serif;*/
+    font-family: Helvetica, Arial, sans-serif;
     padding-bottom: 80px;
     line-height: normal;
 }
@@ -101,15 +102,16 @@ a:active {
 }
 
 h1 {
-    font-size: 2em;
+    font-size: 1.7em;
+    margin-top: 25px;
 }
 
 h2 {
-    font-size: 1.5em;
+    font-size: 1.3em;
 }
 
 h3 {
-    font-size: 1.2em;
+    font-size: 1.1em;
 }
 
 h1, h2, h3, h4, h5, h6, h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
@@ -123,7 +125,7 @@ th {
 }
 
 table.wide-table, table.wide-table input {
-    font-size: smaller;
+    /*font-size: smaller;*/
 }
 
 a.help, #pagehelp {
@@ -263,7 +265,7 @@ html.js-enabled #header .search span {
     background-color: {{ colors.dropdownmenu_background }};
     color: {{ colors.dropdownmenu_text }};
     font-size: small;
-    border: solid 5px {{ colors.dropdownmenu_text }};
+    border: solid 1px {{ colors.dropdownmenu_text }};
     border-top: none;
     z-index: 9999;
     margin-top: 10px;
@@ -487,6 +489,10 @@ html.basket-open #basket-content {
 
 .record a {
     text-decoration: none;
+}
+
+.record a:hover {
+    text-decoration: underline;
 }
 
 .record img {
@@ -771,7 +777,7 @@ ul.errorlist li {
 }
 
 #image-preview .image-title a {
-    font-weight: bolder;
+    /*font-weight: bolder;*/
     font-size: larger;
     color: {{ colors.content_color }};
 }
