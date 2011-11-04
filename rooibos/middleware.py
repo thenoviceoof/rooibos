@@ -62,8 +62,9 @@ import re
 import socket
 
 class AnonymousDomainMiddleware:
-    """If traffic is coming from a trusted domain, then auto sign in as an anonymous user
-    Set this user is settings_local.py, as ANONYMOUS_DOMAIN_USER
+    """If traffic is coming from a trusted domain, then auto sign in as an
+    associated anonymous user. See settings_local.template.py and the
+    ANONYMOUS_DOMAINS variable + comments
     Try to use a username that is sufficiently unique
     """
     def process_request(self, request):
@@ -75,13 +76,13 @@ class AnonymousDomainMiddleware:
             remote = request.META["REMOTE_ADDR"]
             try:
                 host = socket.gethostbyaddr(remote)[0]
-                if re.match(".*%s$" % settings.ANONYMOUS_DOMAIN,host):
-                    user_name = settings.ANONYMOUS_DOMAIN_USER
-                    user = User.objects.filter(username=user_name)
-                    if len(user)>0:
-                        user = user[0]
-                    else:
-                        user = request.user
+                for domain,user_name in settings.ANONYMOUS_DOMAINS:
+                    if re.match(".*%s$" % domain,host):
+                        user = User.objects.filter(username=user_name)
+                        if len(user)>0:
+                            user = user[0]
+                        else:
+                            user = request.user
             except socket.herror:
                 log.debug("No host associated with request")
                 pass
