@@ -40,6 +40,16 @@ def logout(request, *args, **kwargs):
         kwargs['next_page'] = request.GET.get('next', kwargs.get('next_page', settings.LOGOUT_URL))
         return dj_logout(request, *args, **kwargs)
 
+import requests
+
+def login_wind(request, *args, **kwargs):
+    # after the 
+    ticketid = request.GET.get('ticketid')
+    url = "https://wind.columbia.edu/validate?ticketid={0}".format(ticketid)
+    ret = requests.get(url).split("\n")
+    if ret[0] == "yes":
+        uni = ret[1]
+        return HttpResponseRedirect("/")
 
 def effective_permissions(request, app_label, model, id, name):
     try:

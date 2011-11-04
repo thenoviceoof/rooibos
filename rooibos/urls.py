@@ -7,7 +7,7 @@ from django.views.decorators.cache import cache_control
 from django.http import HttpResponseServerError
 from django.template import loader, RequestContext
 from rooibos.ui.views import main
-from rooibos.access.views import login, logout
+from rooibos.access.views import login, logout, login_wind
 
 
 admin.autodiscover()
@@ -38,6 +38,7 @@ urls = [
                                              'template': 'showcases.html',
                                              'extra_context': {'applications': apps_showcases}}, name='showcases'),
     url(r'^login/$', login, {'HELP': 'logging-in', 'SSL': True}, name='login'),
+    url(r'^wind/$', login_wind, name='login_wind'),
     url(r'^logout/$', logout, {'HELP': 'logging-out', 'next_page': settings.LOGOUT_URL}, name='logout'),
 #    url(r'^admin/(.*)', admin.site.root, {'SSL': True}, name='admin'),
     (r'^admin/', include(admin.site.urls)),
