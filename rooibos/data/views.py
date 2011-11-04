@@ -73,6 +73,7 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
     writable_collections = list(accessible_ids(request.user, Collection, write=True))
     readable_collections = list(accessible_ids(request.user, Collection))
     can_edit = request.user.is_authenticated() and request.user.has_perm("data.change_record")
+    can_create = request.user.has_perm("data.add_record")
 
     if id and name:
         record = Record.get_or_404(id, request.user)
@@ -85,12 +86,13 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
 
         can_edit = can_edit and record.editable_by(request.user)
     else:
-        if request.user.is_authenticated() and (writable_collections or (personal and readable_collections)):
+        if request.user.is_authenticated() and (writable_collections or (personal and readable_collections)) and can_create:
             record = Record()
             if personal:
                 record.owner = request.user
         else:
-            raise Http404()
+            # deny access, don't just 404
+            return HttpResponseForbidden()
 
     if record.owner:
         valid_collections = set(readable_collections) | set(writable_collections)
@@ -129,8 +131,10 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
     collection_items = collectionformset = None
 
     if edit:
-
         if not can_edit and not customize and not context:
+            # if the record doesn't actually exist, 403
+            if not id and not name:
+                return HttpResponseForbidden()
             return HttpResponseRedirect(reverse('data-record', kwargs=dict(id=id, name=name)))
 
         def _field_choices():
@@ -181,7 +185,6 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
             member = forms.BooleanField(required=False)
             shared = forms.BooleanField(required=False)
 
-
         fieldvalues_readonly = []
         if customize or context:
             fieldvalues = record.get_fieldvalues(owner=request.user, context=context, hidden=True).filter(owner=request.user)
@@ -192,7 +195,6 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
                                                  exclude=FieldValueForm.Meta.exclude, can_delete=True, extra=3)
 
         CollectionFormSet = formset_factory(CollectionForm, extra=0)
-
 
         if request.method == 'POST':
             formset = FieldValueFormSet(request.POST, request.FILES, queryset=fieldvalues, prefix='fv')
