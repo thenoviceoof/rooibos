@@ -26,7 +26,7 @@ handler404 = getattr(settings, 'HANDLER404', handler404)
 handler500 = getattr(settings, 'HANDLER500', handler500_with_context)
 
 
-def raise_exception():
+def raise_exception(request):
     raise Exception()
 
 

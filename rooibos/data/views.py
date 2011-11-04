@@ -92,7 +92,7 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
                 record.owner = request.user
         else:
             # deny access, don't just 404
-            return HttpResponseForbidden()
+            raise PermissionDenied
 
     if record.owner:
         valid_collections = set(readable_collections) | set(writable_collections)

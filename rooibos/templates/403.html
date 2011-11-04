@@ -1,0 +1,19 @@
+{% extends "master.html" %}
+
+{% block content %}
+
+<h1>Permission Denied</h1>
+
+<h2>
+  <a href="/">Homepage</a>
+</h2>
+
+<h2>
+  <a href="{% url login %}">Sign in</a>
+</h2>
+
+<h2>
+  <a href="javascript:history.back()">Go back</a>
+</h2>
+
+{% endblock %}

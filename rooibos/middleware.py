@@ -87,3 +87,16 @@ class AnonymousDomainMiddleware:
                 pass
         request.user = user
         return None
+
+from django.template import RequestContext
+from django.template.loader import render_to_string
+
+class Custom403Page:
+    """Check status: if we're returning 403, display a page, not just
+    a confusing blank page"""
+    def process_response(self, request, response):
+        if response.status_code == 403:
+            response.content = render_to_string("403.html",
+                                                context_instance = RequestContext(request))
+            return response
+        return response
