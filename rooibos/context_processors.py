@@ -39,4 +39,4 @@ def selected_records(request):
 
 
 def anonymous_user_setting(request):
-    return {"ANONYMOUS_DOMAIN_USER": _settings.ANONYMOUS_DOMAIN_USER}
+    return {"ANONYMOUS_DOMAIN_USERS": [u for d,u in _settings.ANONYMOUS_DOMAINS]}

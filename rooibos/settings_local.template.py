@@ -179,7 +179,11 @@ additional_settings = [
 ]
 
 # if you have AnonymousDomainMiddleware enabled
-# fill these out with the appropriate values
+# fill these out with the appropriate values (domain, username)
 # domain is matched with ^%s$, user is exact match
-ANONYMOUS_DOMAIN = ""
-ANONYMOUS_DOMAIN_USER = ""
+# make sure you alse have a user that matches the username
+ANONYMOUS_DOMAINS = []
+
+# largest dimension to show to users without appropriate permissions
+PROLE_SIZE_LIMIT = False
+
