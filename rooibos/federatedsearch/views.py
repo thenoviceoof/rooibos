@@ -22,7 +22,7 @@ import logging
 #}
 
 source_classes = [
-    NasaImageExchange,
+    # NasaImageExchange,
     ArtstorSearch,
     FlickrSearch,
 ]
