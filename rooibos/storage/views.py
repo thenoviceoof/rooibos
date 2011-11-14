@@ -255,11 +255,13 @@ def manage_storages(request):
 
 @login_required
 def manage_storage(request, storageid=None, storagename=None):
+    new_storage = Falsex
 
     if storageid and storagename:
         storage = get_object_or_404(filter_by_access(request.user, Storage, manage=True), id=storageid)
     else:
         storage = Storage(system='local')
+        new_storage = True
 
     if not storage.id:
         system_choices = [(s,s) for s in settings.STORAGE_SYSTEMS.keys()]
@@ -287,6 +289,7 @@ def manage_storage(request, storageid=None, storagename=None):
             form = StorageForm(request.POST, instance=storage)
             if form.is_valid():
                 form.save()
+                messages.success(request, "Storage created!")
                 return HttpResponseRedirect(reverse('storage-manage-storage', kwargs=dict(
                     storageid=form.instance.id, storagename=form.instance.name)))
     else:
@@ -295,7 +298,7 @@ def manage_storage(request, storageid=None, storagename=None):
     return render_to_response('storage_edit.html',
                           {'storage': storage,
                            'form': form,
-                           },
+                           'new': new_storage},
                           context_instance=RequestContext(request))
 
 

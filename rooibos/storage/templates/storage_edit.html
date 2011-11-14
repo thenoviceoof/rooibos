@@ -75,7 +75,7 @@
 
 {% block content %}
 
-<h1>Edit Storage</h1>
+<h1>{% if new_storage %}New{% else %}Edi{% endif %} Storage</h1>
 
 <h2>{{ storage.title }}</h2>
 
