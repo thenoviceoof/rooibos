@@ -13,6 +13,7 @@ from django.db import backend
 from django.contrib.auth.models import Permission
 from django import forms
 from django.views.decorators.http import require_POST
+from django.http import HttpResponseForbidden
 from rooibos.contrib.tagging.models import Tag, TaggedItem
 from rooibos.contrib.tagging.forms import TagField
 from rooibos.contrib.tagging.utils import parse_tag_input
@@ -33,6 +34,9 @@ import base64
 
 @login_required
 def create(request):
+
+    if not request.user.has_perm("presentation.add_presentation"):
+        return HttpResponseForbidden()
 
     existing_tags = Tag.objects.usage_for_model(OwnedWrapper,
                         filters=dict(user=request.user, content_type=OwnedWrapper.t(Presentation)))
@@ -85,6 +89,9 @@ def add_selected_items(request, presentation):
 
 @login_required
 def edit(request, id, name):
+
+    if not request.user.has_perm("presentation.edit_presentation"):
+        return HttpResponseForbidden()
 
     presentation = get_object_or_404(Presentation.objects.filter(
         id=id, id__in=accessible_ids(request.user, Presentation, write=True, manage=True)))
