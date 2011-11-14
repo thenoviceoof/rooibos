@@ -48,6 +48,7 @@ TEMPLATE_CONTEXT_PROCESSORS = (
 #    "django.core.context_processors.i18n",
     "django.core.context_processors.media",
     "django.core.context_processors.request",
+    "django.contrib.messages.context_processors.messages",
     "rooibos.context_processors.settings",
     "rooibos.context_processors.selected_records",
 )
@@ -71,6 +72,7 @@ MIDDLEWARE_CLASSES = (
     'djangologging.middleware.SuppressLoggingOnAjaxRequestsMiddleware',
     'django.contrib.redirects.middleware.RedirectFallbackMiddleware',
     'django.middleware.transaction.TransactionMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
     'rooibos.storage.middleware.StorageOnStart',
     'rooibos.middleware.HistoryMiddleware',
 )
@@ -87,6 +89,7 @@ INSTALLED_APPS = (
     'django.contrib.humanize',
     'django.contrib.comments',
     'django.contrib.redirects',
+    'django.contrib.messages',
     'django_extensions',
     'google_analytics',
     'rooibos.data',
