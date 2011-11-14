@@ -1,4 +1,8 @@
-{% extends "master.html" %}
+{% extends request.master_template|default:"master.html" %}
+
+{% load ui %}
+{% load viewers %}
+{% load data %}
 
 {% block content %}
 
