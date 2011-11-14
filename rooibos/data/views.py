@@ -630,4 +630,5 @@ def reindex(request):
     from rooibos.solr import SolrIndex
     solr = SolrIndex()
     solr.index()
-    return render_to_response('data_reindex.html')
+    return render_to_response('data_reindex.html',
+                              context_instance=RequestContext(request))
