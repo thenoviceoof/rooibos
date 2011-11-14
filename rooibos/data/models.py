@@ -327,6 +327,7 @@ class Field(models.Model):
     standard = models.ForeignKey(MetadataStandard, null=True, blank=True)
     equivalent = models.ManyToManyField("self", null=True, blank=True)
     vocabulary = models.ForeignKey(Vocabulary, null=True, blank=True)
+    visible = models.BooleanField(default=True)
 
     def save(self, **kwargs):
         unique_slug(self, slug_source='label', slug_field='name', check_current_slug=kwargs.get('force_insert'))

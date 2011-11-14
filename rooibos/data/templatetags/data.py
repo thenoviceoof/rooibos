@@ -17,6 +17,9 @@ class MetaDataNode(template.Node):
         record = self.record.resolve(context)
         fieldvalues = list(record.get_fieldvalues(owner=context['request'].user,
                                                   fieldset=self.fieldset.resolve(context) if self.fieldset else None))
+        # ensure only the visible fieldvalues get rendered
+        fieldvalues = [f for f in fieldvalues if f.field.visible]x
+
         if fieldvalues:
             fieldvalues[0].subitem = False
         for i in range(1, len(fieldvalues)):
