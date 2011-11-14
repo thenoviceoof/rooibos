@@ -137,7 +137,7 @@
                             <li><a href="{% url solr-overview %}">Overview</a></li>
                         </ul>
                     </li>
-                    {% if user.is_authenticated %}
+                    {% if user.is_authenticated and not user.username in ANONYMOUS_DOMAIN_USERS %}
                     <li><a href="{% url presentation-manage %}">Organize</a>
                         <ul class="menu">
                             {% recent_presentation request.user as presentation %}
