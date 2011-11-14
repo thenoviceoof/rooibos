@@ -549,6 +549,7 @@ def manage_collections(request):
 
 @login_required
 def manage_collection(request, id=None, name=None):
+    new_collection = False
 
     if id and name:
         collection = get_object_or_404(Collection,
@@ -556,6 +557,7 @@ def manage_collection(request, id=None, name=None):
                                        id=id)
     else:
         collection = Collection(title='Untitled')
+        new_collection = True
         if not request.user.is_superuser:
             collection.owner = request.user
             collection.hidden = True
@@ -611,8 +613,11 @@ def manage_collection(request, id=None, name=None):
             form = CollectionForm(request.POST, instance=collection)
             if form.is_valid():
                 form.save()
-                return HttpResponseRedirect(reverse('data-collection-manage', kwargs=dict(
-                    id=form.instance.id, name=form.instance.name)))
+                messages.success(request, "Collection created!")
+                return HttpResponseRedirect(reverse('data-collection-manage',
+                                                    kwargs=dict(
+                            id=form.instance.id,
+                            name=form.instance.name,)))
     else:
         form = CollectionForm(instance=collection)
 
@@ -620,6 +625,7 @@ def manage_collection(request, id=None, name=None):
                           {'form': form,
                            'collection': collection,
                            'can_delete': collection.id and (request.user.is_superuser or collection.owner == request.user),
+                           'new': new_collection,
                           },
                           context_instance=RequestContext(request))
 

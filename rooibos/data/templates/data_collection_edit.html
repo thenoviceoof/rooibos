@@ -84,12 +84,15 @@
 
 {% block content %}
 
-<h1>Edit Collection</h1>
+<h1>{% if new %}New{% else %}Edit{% endif %} Collection</h1>
 
 <h2>{{ collection.title }}</h2>
 
 <form action="." method="POST" class="vertical">{% csrf_token %}
 
+{% if created %}
+Created successfully
+{% endif %}
 
 {{ form.title.label_tag }}{{ form.title }}{{ form.title.errors }}
 {{ form.hidden.label_tag }}{{ form.hidden }}{{ form.hidden.errors }}
