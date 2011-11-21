@@ -269,7 +269,7 @@ def manage_storages(request):
 
 @login_required
 def manage_storage(request, storageid=None, storagename=None):
-    new_storage = Falsex
+    new_storage = False
 
     if storageid and storagename:
         storage = get_object_or_404(filter_by_access(request.user, Storage, manage=True), id=storageid)
