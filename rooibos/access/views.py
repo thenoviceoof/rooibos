@@ -12,7 +12,11 @@ from django.core.urlresolvers import reverse
 from models import AccessControl, update_membership_by_ip
 from . import check_access, get_effective_permissions_and_restrictions, get_accesscontrols_for_object
 from rooibos.statistics.models import Activity
-
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
+from django.contrib.auth import login as login_user
+from django.contrib import messages
+import logging
 
 def login(request, login_url=None, *args, **kwargs):
     try:
@@ -40,16 +44,26 @@ def logout(request, *args, **kwargs):
         kwargs['next_page'] = request.GET.get('next', kwargs.get('next_page', settings.LOGOUT_URL))
         return dj_logout(request, *args, **kwargs)
 
-import requests
 
 def login_wind(request, *args, **kwargs):
-    # after the 
-    ticketid = request.GET.get('ticketid')
-    url = "https://wind.columbia.edu/validate?ticketid={0}".format(ticketid)
-    ret = requests.get(url).split("\n")
-    if ret[0] == "yes":
-        uni = ret[1]
-        return HttpResponseRedirect("/")
+    user = authenticate(token=request.GET.get("ticketid"))
+    if not user:
+        messages.error(request, "Could not log you in, sorry")
+        return HttpResponseRedirect((reverse('login')))
+    elif not user.is_active:
+        messages.error(request, "Your account has been marked as inactive")
+        return HttpResponseRedirect((reverse('login')))
+    login_user(request, user)
+
+    # Successful login, add user to IP based groups
+    update_membership_by_ip(request.user, request.META['REMOTE_ADDR'])
+    Activity.objects.create(event='login',
+                            request=request,
+                            content_object=request.user)
+    
+    messages.success(request, "Login successful")
+    return HttpResponseRedirect(reverse('main'))
+
 
 def effective_permissions(request, app_label, model, id, name):
     try:

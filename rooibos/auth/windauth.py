@@ -1,44 +1,32 @@
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
 from django.conf import settings
 from baseauth import BaseAuthenticationBackend
+import requests
 import logging
 
 class WindAuthenticationBackend(BaseAuthenticationBackend):
-    ### HAVE TO CHANGE THIS
-    ### CHECKOUT RemoteAuthBackend
-    def authenticate(self, username=None, password=None):
-        for ldap_auth in settings.LDAP_AUTH:
+    def authenticate(self, token=None):
+        # after the redirect
+        url = "https://wind.columbia.edu/validate?ticketid={0}".format(token)
+        ret = requests.get(url).content.split("\n")
+        if ret[0] == "yes":
+            uni = ret[1]
+            # generate a username
+            username = "Columbian_{0}".format(uni)   
             try:
-                username = username.strip()
-                l = ldap.initialize(ldap_auth['uri'])
-                l.protocol_version = ldap_auth['version']
-                for option, value in ldap_auth['options'].iteritems():
-                    l.set_option(getattr(ldap, option), value)
-                l.simple_bind_s('%s=%s,%s' % (ldap_auth['cn'], username, ldap_auth['base']), password)
-                result = l.search_s(ldap_auth['base'],
-                                    ldap_auth['scope'],
-                                    '%s=%s' % (ldap_auth['cn'], username),
-                                    attrlist=ldap_auth['attributes'])
-                if (len(result) != 1):
-                    continue
-                attributes = result[0][1]
-                for attr in ldap_auth['attributes']:
-                    if not type(attributes[attr]) in (tuple, list):
-                        attributes[attr] = (attributes[attr],)
-                try:
-                    user = User.objects.get(username=username)
-                except User.DoesNotExist:
-                    user = self._create_user(username,
-                                      None,
-                                      ' '.join(attributes[ldap_auth['firstname']]),
-                                      ' '.join(attributes[ldap_auth['lastname']]),
-                                      attributes[ldap_auth['email']][0])
-                if not self._post_login_check(user, attributes):
-                    continue
+                user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                # get the default group: fails fast (before user creation)
+                if uni in settings.WIND_PROF_UNI:
+                    if settings.WIND_PROF_GROUP:
+                        g = Group.objects.get(name=settings.WIND_PROF_GROUP)
+                else:
+                    if settings.WIND_DEFAULT_GROUP:
+                        g = Group.objects.get(name=settings.WIND_DEFAULT_GROUP)
+                # generates a random password
+                user = self._create_user(username)
+                user.groups.add(g)
+            if self._post_login_check(user):
                 return user
-            except ldap.LDAPError, error_message:
-                logging.debug('LDAP error: %s' % error_message)
-            finally:
-                if l:
-                    l.unbind_s()
         return None
+

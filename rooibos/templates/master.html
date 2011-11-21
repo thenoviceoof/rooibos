@@ -92,6 +92,12 @@
 
 
 {% block header %}
+
+<!-- Do WIND Signin -->
+<form method="post" action="https://wind.columbia.edu/login" name="submitwind">
+  <input type="hidden" name="destination" value="https://{{ request.META.HTTP_HOST }}/wind/">
+</form>
+
 {% spaceless %}
     <div id="topmenu">
         <ul>
@@ -101,7 +107,7 @@
             <li><a href="{% url ui-options %}">Options</a></li>
             <li><a href="{% url ui-management %}">Management</a></li>
             {% else %}
-            <li><a href="{% url login %}?next={{ request.get_full_path }}">Log in</a></li>
+            <li><a href="#" onclick="document.submitwind.submit();">Login</a>
 	    {% endif %}
             <li>{% with request.pagehelp|default:"" as help %}{% pagehelp help %}{% endwith %}</li>
             {% if ADMINS %}

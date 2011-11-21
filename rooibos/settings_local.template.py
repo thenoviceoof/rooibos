@@ -187,3 +187,6 @@ ANONYMOUS_DOMAINS = []
 # largest dimension to show to users without appropriate permissions
 PROLE_SIZE_LIMIT = False
 
+WIND_DEFAULT_GROUP = None
+WIND_PROF_UNI = []
+WIND_PROF_GROUP = None

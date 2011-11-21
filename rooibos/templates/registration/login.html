@@ -35,9 +35,9 @@
 <h1 style="margin-top:0.5em;">OR</h1>
 
 <!-- Do WIND Signin -->
-<form method="post" action="https://wind.columbia.edu/login" name="submitwind">
-  <input type="hidden" name="destination" value="http://{{ request.META.HTTP_HOST }}/wind">
-  <a href="#" onclick="document.submitwind.submit();">Sign in with your Columbia ID</a>
+<form method="post" action="https://wind.columbia.edu/login" name="submitwind_loginpage">
+  <input type="hidden" name="destination" value="https://{{ request.META.HTTP_HOST }}/wind/">
+  <a href="#" onclick="document.submitwind_loginpage.submit();">Sign in with your Columbia ID</a>
 </form>
 
 {% endblock %}
