@@ -78,11 +78,15 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
     if id and name:
         record = Record.get_or_404(id, request.user)
 
-        # if the user can't see the image, then don't let them see the record
-        passwords = request.session.get('passwords', dict())
-        media = get_media_for_record(record, request.user, passwords)
-        if not media:
-            raise Http404()
+        # if the user passes the first test
+        if record:
+            # if the user can't see an image, and there is one, then
+            # don't let them see the record
+            passwords = request.session.get('passwords', dict())
+            media = get_media_for_record(record, request.user, passwords)
+            unfiltered_media = Media.objects.filter(record__id=record.id)
+            if not media and unfiltered_media:
+                raise Http404()
 
         can_edit = can_edit and record.editable_by(request.user)
     else:
