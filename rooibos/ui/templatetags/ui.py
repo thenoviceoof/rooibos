@@ -97,6 +97,9 @@ def add_tags_form(context, object, tag=None, label=None):
 
 @register.inclusion_tag('ui_tag.html', takes_context=True)
 def tag(context, tag, object=None, removable=False, styles=None):
+    removable = bool(removable)
+    if context['request'].user.is_staff:
+        removable = True
     return {'object_id': object and object.id or None,
             'object_type': object and ContentType.objects.get_for_model(object.__class__).id or None,
             'tag': tag,
