@@ -457,6 +457,7 @@ def match_up_files(request):
     available_storage = get_list_or_404(filter_by_access(request.user, Storage, manage=True).order_by('title').values_list('id', 'title'))
     available_collections = get_list_or_404(filter_by_access(request.user, Collection, manage=True))
 
+    # small form class
     class MatchUpForm(forms.Form):
         collection = forms.ChoiceField(choices=((c.id, c.title) for c in sorted(available_collections, key=lambda c: c.title)))
         storage = forms.ChoiceField(choices=available_storage)
@@ -469,6 +470,7 @@ def match_up_files(request):
             collection = get_object_or_404(filter_by_access(request.user, Collection.objects.filter(id=form.cleaned_data['collection']), manage=True))
             storage = get_object_or_404(filter_by_access(request.user, Storage.objects.filter(id=form.cleaned_data['storage']), manage=True))
 
+            # real heavy lifting happens here
             matches = match_up_media(storage, collection)
 
             for record, filename in matches:
