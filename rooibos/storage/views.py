@@ -40,6 +40,15 @@ def add_content_length(func):
         return response
     return _add_header
 
+def insecure_required(view_func):
+    """Decorator makes sure URL is accessed over http"""
+    def _wrapped_view_func(request, *args, **kwargs):
+        if request.is_secure() and settings.INSECURE_UPLOAD:
+            request_url = request.build_absolute_uri(request.get_full_path())
+            insecure_url = request_url.replace('https://', 'http://')
+            return HttpResponseRedirect(insecure_url)
+        return view_func(request, *args, **kwargs)
+    return _wrapped_view_func
 
 @add_content_length
 @cache_control(private=True, max_age=3600)
@@ -114,6 +123,7 @@ def media_upload_form(request):
     return UploadFileForm
 
 
+@insecure_required
 @csrf_exempt
 @login_required
 def media_upload(request, recordid, record):
@@ -255,7 +265,7 @@ def manage_storages(request):
 
 @login_required
 def manage_storage(request, storageid=None, storagename=None):
-    new_storage = Falsex
+    new_storage = False
 
     if storageid and storagename:
         storage = get_object_or_404(filter_by_access(request.user, Storage, manage=True), id=storageid)
@@ -302,6 +312,7 @@ def manage_storage(request, storageid=None, storagename=None):
                           context_instance=RequestContext(request))
 
 
+@insecure_required
 @csrf_exempt
 @login_required
 def import_files(request):
