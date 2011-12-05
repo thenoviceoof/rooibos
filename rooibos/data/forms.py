@@ -10,7 +10,7 @@ class FieldSetChoiceField(forms.ChoiceField):
             self._for_user = None
         kwargs['choices'] = [
                 ('0', kwargs.pop('default_label', None) or '-' * 10),
-                ('Default field sets', list(FieldSet.for_user(self._for_user).filter(owner=None).values_list('id', 'title')))
+                ('Field sets', list(FieldSet.for_user(self._for_user).filter(owner=None).values_list('id', 'title')))
             ]
         if self._for_user:
             user_fieldsets = list(FieldSet.for_user(self._for_user).filter(owner=self._for_user).values_list('id', 'title'))
