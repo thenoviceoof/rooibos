@@ -124,11 +124,17 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
     fieldsetform = FieldSetForm(request.GET)
     if fieldsetform.is_valid():
         fieldset = FieldSet.for_user(request.user).get(id=fieldsetform.cleaned_data['fieldset']) if fieldsetform.cleaned_data['fieldset'] else None
-    elif id and name:
+    elif (edit or customize) and (id and name):
+        # if we're editing, touch all the data (no default fieldset)
         fieldset = None
     else:
-        # Creating new record, use DC fieldset by default
-        fieldset = FieldSet.objects.get(name='dc')
+        # use default fieldset settings
+        if (settings.DEFAULT_FIELDSET and
+            isinstance(settings.DEFAULT_FIELDSET, basestring)):
+            default_fieldset = settings.DEFAULT_FIELDSET
+        else: # yes, it's a default default setting
+            default_fieldset = 'dc'
+        fieldset = FieldSet.objects.get(name=default_fieldset)
 
     collection_items = collectionformset = None
 

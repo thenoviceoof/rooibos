@@ -187,3 +187,5 @@ ANONYMOUS_DOMAINS = []
 # largest dimension to show to users without appropriate permissions
 PROLE_SIZE_LIMIT = False
 
+# if you want to use your own fieldset as a default
+# DEFAULT_FIELDSET = "dc"
