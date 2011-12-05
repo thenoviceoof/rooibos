@@ -95,7 +95,7 @@ class FlickrSearch(FederatedSearch):
                 if license['url'].startswith('http://creativecommons.org/')]
 
 
-    def search(self, query, page=1, pagesize=50, sort='date-posted-desc'):
+    def search(self, query, page=1, pagesize=50, sort='relevance'):
         if not query:
             return None
         cc_licenses = ','.join(self.get_cc_licenses())
