@@ -192,4 +192,8 @@ WIND_PROF_UNI = []
 WIND_PROF_GROUP = None
 
 # if you want to use your own fieldset as a default
-# DEFAULT_FIELDSET = "dc"
+#DEFAULT_FIELDSET = "dc"
+
+# as of Apache 2.2.3 (ours 2.2.17) uploads through HTTPS don't work, so we
+# reroute them through HTTP insteadx
+#INSECURE_UPLOAD = True
