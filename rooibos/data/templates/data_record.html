@@ -212,7 +212,11 @@ $(document).ready(function() {
     <div class="facet-header">Upload Media</div>
     <div class="facet-body">
 {% if record.id %}
+{% if insecure_url %}
+<a href="{{ insecure_url }}">Enable upload media</a>
+{% else %}
 {% include "storage_upload_sidebar.html" %}
+{% endif %}
 {% else %}
 Please save the record before uploading media.
 {% endif %}
