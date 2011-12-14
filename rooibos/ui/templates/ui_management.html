@@ -27,9 +27,6 @@
 {% if user.is_superuser or storage_manage %}
     <li><a href="{% url storage-manage %}"><img src="{% url static 'images/icons/hdd_unmount.png' %}" alt="Manage Storage" /> Manage Storage</a></li>
 {% endif %}
-{% if user.is_superuser %}
-    <li><a href="{% url data-reindex %}"><img src="{% url static 'images/icons/refresh.png' %}" alt="Rebuild Search Index" />Rebuild Search Index</a></li>
-{% endif %}
 {% if collection_write %}
     <li><a href="{% url data-import %}"><img src="{% url static 'images/icons/applix.png' %}" alt="Import Metadata" /> Import Metadata</a></li>
 {% endif %}
