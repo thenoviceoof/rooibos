@@ -115,7 +115,10 @@ class SolrIndex():
         else:
             SolrIndexUpdates.objects.filter(id__in=processed_updates).delete()
 
+            
+
     # add a single document on the fly
+    # cannibalized from reindex
     def add_doc(self, id):
         conn = Solr(settings.SOLR_URL)
 
@@ -134,6 +137,13 @@ class SolrIndex():
                                    fieldvalue_dict.get(record.id, []),
                                    media_dict.get(record.id, []))
         conn.add([doc])
+
+    # remove a single document on the fly
+    # cannibalized from reindex
+    def remove_doc(self, id):
+        conn = Solr(settings.SOLR_URL)
+        conn.delete(q='id:(%s)' % str(id))
+
 
     def clear_missing(self, verbose=False):
         conn = Solr(settings.SOLR_URL)
