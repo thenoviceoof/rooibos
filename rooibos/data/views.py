@@ -49,7 +49,6 @@ def collections(request):
 #                              context_instance=RequestContext(request))
 
 
-
 @login_required
 def record_delete(request, id, name):
     if request.method == 'POST':
@@ -300,6 +299,12 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
     else:
         upload_form = None
 
+    # handle uploading over secure URLs: in the view, offer link to insecure
+    insecure_url = None
+    if request.is_secure() and settings.INSECURE_UPLOAD:
+        request_url = request.build_absolute_uri(request.get_full_path())
+        insecure_url = request_url.replace('https://', 'http://')
+
     return render_to_response('data_record.html',
                               {'record': record,
                                'media': media,
@@ -316,6 +321,7 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
                                'upload_form': upload_form,
                                'upload_url': ("%s?sidebar&next=%s" % (reverse('storage-media-upload', args=(record.id, record.name)), request.get_full_path()))
                                              if record.id else None,
+                               'insecure_url': insecure_url,
                                },
                               context_instance=RequestContext(request))
 
