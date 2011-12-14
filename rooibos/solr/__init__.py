@@ -11,6 +11,7 @@ from rooibos.util.models import OwnedWrapper
 from rooibos.contrib.tagging.models import Tag, TaggedItem
 from pysolr import Solr
 from rooibos.util.progressbar import ProgressBar
+import logging
 
 SOLR_EMPTY_FIELD_VALUE = 'unspecified'
 
@@ -113,6 +114,36 @@ class SolrIndex():
             SolrIndexUpdates.objects.filter(delete=False).delete()
         else:
             SolrIndexUpdates.objects.filter(id__in=processed_updates).delete()
+
+            
+
+    # add a single document on the fly
+    # cannibalized from reindex
+    def add_doc(self, id):
+        conn = Solr(settings.SOLR_URL)
+
+        self._build_group_tree()
+        record_ids = [id]
+        media_dict = self._preload_related(Media, record_ids)
+        fieldvalue_dict = self._preload_related(FieldValue, record_ids,
+                                                related=2)
+        groups_dict = self._preload_related(CollectionItem, record_ids)
+        core_fields = dict((f, f.get_equivalent_fields())
+                           for f in Field.objects.filter(standard__prefix='dc'))
+        
+        record = Record.objects.filter(id__in=record_ids)[0]
+        doc = self._record_to_solr(record, core_fields,
+                                   groups_dict.get(record.id, []),
+                                   fieldvalue_dict.get(record.id, []),
+                                   media_dict.get(record.id, []))
+        conn.add([doc])
+
+    # remove a single document on the fly
+    # cannibalized from reindex
+    def remove_doc(self, id):
+        conn = Solr(settings.SOLR_URL)
+        conn.delete(q='id:(%s)' % str(id))
+
 
     def clear_missing(self, verbose=False):
         conn = Solr(settings.SOLR_URL)
