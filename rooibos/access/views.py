@@ -18,7 +18,9 @@ import re
 
 def login(request, login_url=None, redirect_field_name=REDIRECT_FIELD_NAME,
           *args, **kwargs):
-    if request.user.is_authenticated():
+    # until anon users return False for is_authenticated
+    # anon domains and pass-throughs are incompatible
+    if request.user.is_authenticated() and not(settings.ANONYMOUS_DOMAINS):
         # Similar redirect_to processing as in django.contrib.auth.views.login
         redirect_to = request.REQUEST.get(redirect_field_name, '')
         # Light security check -- make sure redirect_to isn't garbage.
