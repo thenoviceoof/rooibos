@@ -22,6 +22,7 @@ from rooibos.solr.views import run_search
 from rooibos.context_processors import selected_records as ctx_selected_records
 from rooibos.presentation.models import Presentation
 from rooibos.userprofile.views import load_settings, store_settings
+from django.conf import settings
 import random
 import logging
 
@@ -56,12 +57,13 @@ def main(request):
     random.shuffle(order)
 
     request.session.set_test_cookie()
-    form = AuthenticationForm()
+
+    user_login = request.user.username in [u[1] for u in settings.ANONYMOUS_DOMAINS]
 
     return render_to_response('main.html',
                               {'records': records,
                                'order': [0] + order,
-                               'login_form': form},
+                               'user_login': user_login},
                               context_instance=RequestContext(request))
 
 

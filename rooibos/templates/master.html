@@ -16,7 +16,7 @@
         if (basket_open) document.documentElement.className = 'js-enabled basket-open';
         var custom_process_facets = false;
     </script>
-    <title>MDID{% block title %}{% endblock %}</title>
+    <title>LUMEN{% block title %}{% endblock %}</title>
     <link rel="shortcut icon" href="{% url static 'images/favicon.ico' %}" />
 {% block stylesheets %}
 {% compress css %}
@@ -78,7 +78,7 @@
 
 {% block footer %}
             <div id="footer">
-                MDID copyright 1997-2011 James Madison University.  Fieldwork photos copyright 2011 Columbia University Media Center for Art History.
+                <a href="http://mdid.org/">MDID</a> copyright 1997-2011 <a href="http://www.jmu.edu">James Madison University</a>.  Fieldwork photos copyright 2011 <a href="http://www.columbia.edu">Columbia University</a> <a href="http://mcah.columbia.edu/">Media Center for Art History</a>.
 		<!-- EDIT HERE FOOTER -->
             </div>
 {% endblock %}
