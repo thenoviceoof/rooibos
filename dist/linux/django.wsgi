@@ -1,8 +1,8 @@
 import os
 import sys
 
-sys.path.append('/var/local/mdid')
-sys.path.append('/var/local/mdid/rooibos/contrib')
+sys.path.append('/home/mdid/rooibos')
+sys.path.append('/home/mdid/rooibos/rooibos/contrib')
 
 os.environ['DJANGO_SETTINGS_MODULE'] = 'rooibos.settings'
 
