@@ -1,5 +1,8 @@
 from django.conf import settings as _settings
+from django.utils.functional import SimpleLazyObject
+from rooibos.util import IterableLazyObject
 from rooibos.data.models import Record
+from rooibos.ui.functions import fetch_current_presentation
 
 def settings(request):
     """
@@ -40,3 +43,20 @@ def selected_records(request):
 
 def anonymous_user_setting(request):
     return {"ANONYMOUS_DOMAIN_USERS": [u for d,u in _settings.ANONYMOUS_DOMAINS]}
+
+def current_presentation(request):
+
+    presentation = SimpleLazyObject(lambda: fetch_current_presentation(request.user))
+
+    def get_presentation_records():
+        try:
+            return list(presentation.items.values_list('record_id', flat=True).distinct())
+        except AttributeError:
+            return []
+
+    presentation_records = IterableLazyObject(get_presentation_records)
+
+    return {
+        'current_presentation': presentation,
+        'current_presentation_records': presentation_records,
+    }
