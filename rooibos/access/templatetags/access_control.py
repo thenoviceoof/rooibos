@@ -54,5 +54,8 @@ def accessible_objects(user, args):
     read = 'r' in access
     write = 'w' in access
     manage = 'm' in access
-    return filter_by_access(user, ContentType.objects.get(app_label=app, model=model).model_class(),
-                            read, write, manage)
+    try:
+        model_class = ContentType.objects.get(app_label=app, model=model).model_class()
+    except:
+        return
+    return filter_by_access(user, model_class, read, write, manage)
