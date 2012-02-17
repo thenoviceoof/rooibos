@@ -27,4 +27,7 @@
       .record img { max-width:280px; }
     </style>
     {% endif %}
+    {% if record_in_current_presentation %}
+    <img src="{% url static 'images/inuse.png' %}" alt="In presentation" title="In presentation" class="inuse-icon" />
+    {% endif %}
 </div>
