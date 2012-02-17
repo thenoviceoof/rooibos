@@ -24,6 +24,7 @@ from rooibos.storage import get_media_for_record, get_image_for_record, get_thum
 from rooibos.util import json_view
 from rooibos.statistics.models import Activity
 import logging
+from django.contrib import messages
 import os
 import uuid
 import mimetypes
