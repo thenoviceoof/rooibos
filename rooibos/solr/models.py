@@ -39,8 +39,11 @@ def post_taggeditem_callback(sender, instance, **kwargs):
             mark_for_update(record_id=instance.object_id)
 
 
-def post_collectionitem_callback(sender, **kwargs):
-    mark_for_update(record_id=kwargs['instance'].record.id)
+def post_collectionitem_save_callback(sender, **kwargs):
+    mark_for_update(record_id=kwargs['instance'].record_id)
+
+def post_collectionitem_delete_callback(sender, **kwargs):
+    mark_for_update(record_id=kwargs['instance'].record_id, delete=True)
 
 
 post_delete.connect(post_record_delete_callback, sender=Record)
@@ -49,8 +52,8 @@ post_save.connect(post_record_save_callback, sender=Record)
 post_delete.connect(post_taggeditem_callback, sender=TaggedItem)
 post_save.connect(post_taggeditem_callback, sender=TaggedItem)
 
-post_delete.connect(post_collectionitem_callback, sender=CollectionItem)
-post_save.connect(post_collectionitem_callback, sender=CollectionItem)
+post_delete.connect(post_collectionitem_delete_callback, sender=CollectionItem)
+post_save.connect(post_collectionitem_save_callback, sender=CollectionItem)
 
 
 def disconnect_signals():
