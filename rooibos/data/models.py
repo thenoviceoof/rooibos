@@ -112,6 +112,7 @@ class Record(models.Model):
             ("view_original", "Not restricted to PROLE_SIZE_LIMIT size images"),
             )
 
+    @staticmethod
     def filter_by_access(user, *ids):
         records = Record.objects.distinct()
 
