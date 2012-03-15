@@ -123,6 +123,7 @@ except ImportError:
                 from elementtree import ElementTree as ET
             except ImportError:
                 raise ImportError("No suitable ElementTree implementation was found.")
+import logging
 
 __all__ = ['Solr']
 
@@ -205,10 +206,13 @@ class Solr(object):
             value = value.strftime('%Y-%m-%dT00:00:00.000Z')
         elif isinstance(value, bool):
             if value:
-                value = 'true'
+                value = u'true'
             else:
-                value = 'false'
+                value = u'false'
+        elif isinstance(value, basestring):
+            value = unicode(value, encoding="utf-8")
         else:
+            # might be a number, so we'll encode normally
             value = unicode(value)
         return value
 
