@@ -26,5 +26,6 @@ urlpatterns = patterns('',
     url(r'^record/new/personal/$', record, kwargs={'id': None, 'name': None, 'edit': True, 'personal': True}, name='data-record-new-personal'),
     url(r'^import/$', data_import, name='data-import'),
     url(r'^import/(?P<file>[\w\d]{32})/$', data_import_file, name='data-import-file'),
+    url(r'^reindex/$', reindex, name='data-reindex'),
 #    (r'^feeds/(?P<url>.*)/$', feed, {'feed_dict': feeds}),
 )

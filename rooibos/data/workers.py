@@ -87,3 +87,32 @@ def csvimport(job):
     except Exception, ex:
 
         jobinfo.complete('Failed: %s' % ex, None)
+
+
+from rooibos.solr import SolrIndex
+
+@register_worker('solr-reindex')
+def solr_reindex(job):
+    logging.info('solr-reindex started for %s' % job)
+    jobinfo = JobInfo.objects.get(id=job.arg)
+
+    try:
+        if jobinfo.status.startswith == 'Complete':
+            # job finished previously
+            return
+
+        solr = SolrIndex()
+        # first, index
+        count = 0
+        for i in solr.index(verbose=True, all=True, batch_size=100, generator=True):
+            jobinfo.update_status('indexing record %d' % i)
+            count = i
+        # then clear out the missing stuff
+        for i in solr.clear_missing(verbose=True, generator=True):
+            jobinfo.update_status('checking for missing: record %d' % i)
+
+        jobinfo.complete('Complete', '%d rows processed' % count)
+
+    except Exception, ex:
+
+        jobinfo.complete('Failed: %s' % ex, None)

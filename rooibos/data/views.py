@@ -673,3 +673,20 @@ def manage_collection(request, id=None, name=None):
                            'new': new_collection,
                           },
                           context_instance=RequestContext(request))
+
+@login_required
+def reindex(request):
+    if not(request.user.is_superuser):
+        return HttpResponseRedirect("/")
+
+    j = JobInfo.objects.create(owner=request.user,
+                               func='solr-reindex',
+                               arg="")
+    j.run()
+    request.user.message_set.create(message='Import job has been submitted.')
+    return HttpResponseRedirect("%s?highlight=%s" % (reverse('workers-jobs'), j.id))
+
+    # solr = SolrIndex()
+    # solr.index()
+    # return render_to_response('data_reindex.html',
+    #                           context_instance=RequestContext(request))

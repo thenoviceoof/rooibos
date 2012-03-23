@@ -19,12 +19,7 @@ class SolrIndexUpdates(models.Model):
 
 
 def mark_for_update(record_id, delete=False):
-    solr = SolrIndex()
-    if delete:
-        solr.remove_doc(record_id)
-    else:
-        solr.add_doc(record_id)
-
+    SolrIndexUpdates.objects.create(record=record_id, delete=delete)
 
 def post_record_delete_callback(sender, **kwargs):
     mark_for_update(record_id=kwargs['instance'].id, delete=True)

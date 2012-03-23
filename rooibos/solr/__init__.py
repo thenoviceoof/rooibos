@@ -76,13 +76,12 @@ class SolrIndex():
         conn = Solr(settings.SOLR_URL)
         conn.optimize()
 
-    def index(self, verbose=False, all=False):
+    def index(self, verbose=False, all=False, batch_size=500, generator=False):
         from models import SolrIndexUpdates
         self._build_group_tree()
         conn = Solr(settings.SOLR_URL)
         core_fields = dict((f, f.get_equivalent_fields()) for f in Field.objects.filter(standard__prefix='dc'))
         count = 0
-        batch_size = 500
         process_thread = None
         if all:
             total_count = Record.objects.count()
@@ -100,9 +99,16 @@ class SolrIndex():
                 conn.delete(q='id:(%s)' % ' '.join(map(str, to_delete)))
             total_count = len(to_update)
 
-        if verbose: pb = ProgressBar(total_count)
+        if verbose and not(generator):
+            pb = ProgressBar(total_count)
+        if verbose and generator:
+            yield 0
         while True:
-            if verbose: pb.update(count)
+            if verbose and not(generator):
+                pb.update(count)
+            if verbose and generator:
+                yield count
+
             if all:
                 record_ids = Record.objects.all()[count:count + batch_size].values_list('id', flat=True)
             else:
@@ -134,7 +140,8 @@ class SolrIndex():
 
         if process_thread:
             process_thread.join()
-        if verbose: pb.done()
+        if verbose and not(generator):
+            pb.done()
 
         if all:
             SolrIndexUpdates.objects.filter(delete=False).delete()
@@ -171,15 +178,17 @@ class SolrIndex():
         conn.delete(q='id:(%s)' % str(id))
 
 
-    def clear_missing(self, verbose=False):
+    def clear_missing(self, verbose=False, batch_size=500, generator=False):
         conn = Solr(settings.SOLR_URL)
         start = 0
         to_delete = []
         pb = None
         if verbose: print "Checking for indexed records no longer in database"
         while True:
-            if verbose and pb: pb.update(start)
-            result = conn.search('*:*', sort='id asc', start=start, rows=500, fields=['id'])
+            if verbose and pb and not(generator): pb.update(start)
+            if verbose and generator:
+                yield start
+            result = conn.search('*:*', sort='id asc', start=start, rows=batch_size, fields=['id'])
             if not result:
                 break
             if verbose and not pb: pb = ProgressBar(result.hits)
@@ -188,7 +197,7 @@ class SolrIndex():
             for r in records:
                 ids.remove(r)
             to_delete.extend(ids)
-            start += 500
+            start += batch_size
         if verbose and pb: pb.done()
         pb = None
         if verbose and to_delete:
@@ -196,8 +205,8 @@ class SolrIndex():
             pb = ProgressBar(len(to_delete))
         while to_delete:
             if verbose and pb: pb.update(pb.total - len(to_delete))
-            conn.delete(q='id:(%s)' % ' '.join(map(str, to_delete[:500])))
-            to_delete = to_delete[500:]
+            conn.delete(q='id:(%s)' % ' '.join(map(str, to_delete[:batch_size])))
+            to_delete = to_delete[batch_size:]
         if verbose and pb: pb.done()
 
     @staticmethod
