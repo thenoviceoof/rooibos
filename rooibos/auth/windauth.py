@@ -12,7 +12,7 @@ class WindAuthenticationBackend(BaseAuthenticationBackend):
         if ret[0] == "yes":
             uni = ret[1]
             # generate a username
-            username = "Columbian_{0}".format(uni)   
+            username = "Columbian_{0}".format(uni)
             try:
                 user = User.objects.get(username=username)
             except User.DoesNotExist:
@@ -25,7 +25,9 @@ class WindAuthenticationBackend(BaseAuthenticationBackend):
                         g = Group.objects.get(name=settings.WIND_DEFAULT_GROUP)
                 # generates a random password
                 user = self._create_user(username)
+                user.first_name = uni
                 user.groups.add(g)
+                user.save()
             if self._post_login_check(user):
                 return user
         return None
