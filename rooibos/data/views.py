@@ -128,8 +128,23 @@ def record(request, id, name, contexttype=None, contextid=None, contextname=None
         fieldset = FieldSetChoiceField(user=request.user, default_label='Default' if not edit else None)
 
     fieldsetform = FieldSetForm(request.GET)
+
     if fieldsetform.is_valid():
-        fieldset = FieldSet.for_user(request.user).get(id=fieldsetform.cleaned_data['fieldset']) if fieldsetform.cleaned_data['fieldset'] else None
+        fieldset_id = fieldsetform.cleaned_data['fieldset']
+        if fieldset_id:
+            fieldset = FieldSet.for_user(request.user).get(id=fieldset_id)
+        else:
+            # since we are viewing, use the default fieldset
+            # not the best way to do it, but someone might depend on None on the edit side
+            if not edit:
+                if (settings.DEFAULT_FIELDSET and
+                    isinstance(settings.DEFAULT_FIELDSET, basestring)):
+                    fieldset = settings.DEFAULT_FIELDSET
+                else:
+                    fieldset = 'dc'
+            else:
+                fieldset = None
+            fieldset = FieldSet.objects.get(name=fieldset)
     elif (edit or customize) and (id and name):
         # if we're editing, touch all the data (no default fieldset)
         fieldset = None
