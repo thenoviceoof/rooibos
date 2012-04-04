@@ -76,7 +76,36 @@ class SolrIndex():
         conn = Solr(settings.SOLR_URL)
         conn.optimize()
 
-    def index(self, verbose=False, all=False, batch_size=500, generator=False):
+    def index(self, verbose=False, all=False, batch_size=500):
+        # keep this around to find the total_count before hand
+        if all:
+            total_count = Record.objects.count()
+        else:
+            processed_updates = []
+            to_update = []
+            to_delete = []
+            for id,record,delete in SolrIndexUpdates.objects.all()[:batch_size].values_list('id', 'record', 'delete'):
+                processed_updates.append(id)
+                if delete:
+                    to_delete.append(record)
+                else:
+                    to_update.append(record)
+            if to_delete:
+                conn.delete(q='id:(%s)' % ' '.join(map(str, to_delete)))
+            total_count = len(to_update)
+
+        if verbose:
+            pb = ProgressBar(total_count)
+
+        for count in self.index_generator(verbose=verbose, all=all,
+                                          batch_size=batch_size):
+            pb.update(count)
+
+        if verbose:
+            pb.done()
+
+
+    def index_generator(self, verbose=False, all=False, batch_size=500):
         from models import SolrIndexUpdates
         self._build_group_tree()
         conn = Solr(settings.SOLR_URL)
@@ -99,14 +128,10 @@ class SolrIndex():
                 conn.delete(q='id:(%s)' % ' '.join(map(str, to_delete)))
             total_count = len(to_update)
 
-        if verbose and not(generator):
-            pb = ProgressBar(total_count)
-        if verbose and generator:
+        if verbose:
             yield 0
         while True:
-            if verbose and not(generator):
-                pb.update(count)
-            if verbose and generator:
+            if verbose:
                 yield count
 
             if all:
@@ -140,14 +165,11 @@ class SolrIndex():
 
         if process_thread:
             process_thread.join()
-        if verbose and not(generator):
-            pb.done()
 
         if all:
             SolrIndexUpdates.objects.filter(delete=False).delete()
         else:
             SolrIndexUpdates.objects.filter(id__in=processed_updates).delete()
-
             
 
     # add a single document on the fly
