@@ -1,176 +1,257 @@
-import random, sys, select, logging
-from time import time
+import logging
+import random
+import sys
 
-from gearman.compat import *
-from gearman.client import GearmanBaseClient
+from gearman import compat
+from gearman.connection_manager import GearmanConnectionManager
+from gearman.worker_handler import GearmanWorkerCommandHandler
+from gearman.errors import ConnectionError
 
-log = logging.getLogger("gearman")
+gearman_logger = logging.getLogger(__name__)
 
-class GearmanJob(object):
-    def __init__(self, conn, func, arg, handle):
-        self.func = func
-        self.arg = arg
-        self.handle = handle
-        self.conn = conn
+POLL_TIMEOUT_IN_SECONDS = 60.0
 
-    def status(self, numerator, denominator):
-        self.conn.send_command_blocking("work_status", dict(handle=self.handle, numerator=numerator, denominator=denominator))
+class GearmanWorker(GearmanConnectionManager):
+    """
+    GearmanWorker :: Interface to accept jobs from a Gearman server
+    """
+    command_handler_class = GearmanWorkerCommandHandler
 
-    def complete(self, result):
-        self.conn.send_command_blocking("work_complete", dict(handle=self.handle, result=result))
+    def __init__(self, host_list=None):
+        super(GearmanWorker, self).__init__(host_list=host_list)
 
-    def fail(self):
-        self.conn.send_command_blocking("work_fail", dict(handle=self.handle))
+        self.randomized_connections = None
 
-    def __repr__(self):
-        return "<GearmanJob func=%s arg=%s handle=%s conn=%s>" % (self.func, self.arg, self.handle, repr(self.conn))
+        self.worker_abilities = {}
+        self.worker_client_id = None
+        self.command_handler_holding_job_lock = None
 
-class GearmanWorker(GearmanBaseClient):
-    def __init__(self, *args, **kwargs):
-        super(GearmanWorker, self).__init__(*args, **kwargs)
-        self.abilities = {}
+        self._update_initial_state()
 
-    def register_function(self, name, func, timeout=None):
-        """Register a function with gearman with an optional default timeout.
+    def _update_initial_state(self):
+        self.handler_initial_state['abilities'] = self.worker_abilities.keys()
+        self.handler_initial_state['client_id'] = self.worker_client_id
+
+    ########################################################
+    ##### Public methods for general GearmanWorker use #####
+    ########################################################
+    def register_task(self, task, callback_function):
+        """Register a function with this worker
+
+        def function_callback(calling_gearman_worker, current_job):
+            return current_job.data
         """
-        name = self.prefix + name
-        self.abilities[name] = (func, timeout)
+        self.worker_abilities[task] = callback_function
+        self._update_initial_state()
 
-    def register_class(self, clas, name=None, decorator=None):
-        """Register all the methods of a class or instance object with
-        with gearman.
-        
-        'name' is an optional prefix for function names (name.method_name)
-        """
-        obj = clas
-        if not isinstance(clas, type):
-            clas = clas.__class__
-        name = name or getattr(obj, 'name', clas.__name__)
-        for k in clas.__dict__:
-            v = getattr(obj, k)
-            if callable(v) and k[0] != '_':
-                if decorator:
-                    v = decorator(v)
-                self.register_function("%s.%s" % (name, k), v)
+        for command_handler in self.handler_to_connection_map.iterkeys():
+            command_handler.set_abilities(self.handler_initial_state['abilities'])
 
-    def _can_do(self, connection, name, timeout=None):
-        cmd_name = (timeout is None) and "can_do" or "can_do_timeout"
-        cmd_args = (timeout is None) and dict(func=name) or dict(func=name, timeout=timeout)
-        connection.send_command(cmd_name, cmd_args)
+        return task
 
-    def _set_abilities(self, conn):
-        for name, args in self.abilities.iteritems():
-            self._can_do(conn, name, args[1])
+    def unregister_task(self, task):
+        """Unregister a function with worker"""
+        self.worker_abilities.pop(task, None)
+        self._update_initial_state()
 
-    @property
-    def alive_connections(self):
-        """Return a shuffled list of connections that are alive,
-        and try to reconnect to dead connections if necessary."""
-        random.shuffle(self.connections)
-        all_dead = all(conn.is_dead for conn in self.connections)
-        alive = []
-        for conn in self.connections:
-            if not conn.connected and (not conn.is_dead or all_dead):
-                try:
-                    conn.connect()
-                except conn.ConnectionError:
-                    continue
-                else:
-                    conn.sleeping = False
-                    self._set_abilities(conn)
-            if conn.connected:
-                alive.append(conn)
-        return alive
+        for command_handler in self.handler_to_connection_map.iterkeys():
+            command_handler.set_abilities(self.handler_initial_state['abilities'])
 
-    def stop(self):
-        self.working = False
+        return task
 
-    def _work_connection(self, conn, hooks=None):
-        conn.send_command("grab_job")
-        cmd = ('noop',)
-        while cmd and cmd[0] == 'noop':
-            cmd = conn.recv_blocking(timeout=0.5)
+    def set_client_id(self, client_id):
+        """Notify the server that we should be identified as this client ID"""
+        self.worker_client_id = client_id
+        self._update_initial_state()
 
-        if not cmd or cmd[0] == 'no_job':
-            return False
+        for command_handler in self.handler_to_connection_map.iterkeys():
+            command_handler.set_client_id(self.handler_initial_state['client_id'])
 
-        if cmd[0] != "job_assign":
-            if cmd[0] == "error":
-                log.error("Error from server: %s: %s" % (cmd[1]['err_code'], cmd[1]['err_text']))
-            else:
-                log.error("Was expecting job_assigned or no_job, received %s" % cmd[0])
-            conn.mark_dead()
-            return False
+        return client_id
 
-        job = GearmanJob(conn, **cmd[1])
-        try:
-            func = self.abilities[cmd[1]['func']][0]
-        except KeyError:
-            log.error("Received work for unknown function %s" % cmd[1])
-            return True
+    def work(self, poll_timeout=POLL_TIMEOUT_IN_SECONDS):
+        """Loop indefinitely, complete tasks from all connections."""
+        continue_working = True
+        worker_connections = []
 
-        if hooks:
-            hooks.start(job)
-        try:
-            result = func(job)
-        except Exception:
-            if hooks:
-                hooks.fail(job, sys.exc_info())
-            job.fail()
-        else:
-            if hooks:
-                hooks.complete(job, result)
-            job.complete(result)
+        # We're going to track whether a previous call to our closure indicated
+        # we were processing a job. This is just a list of possibly a single
+        # element indicating we had a job. It's a list so that through the
+        # magic of closures we can reference and write to it each call.
+        # This is all so that we can determine when we've finished processing a job
+        # correctly.
+        had_job = []
 
+        def continue_while_connections_alive(any_activity):
+            if had_job and not self.has_job_lock():
+                return self.after_poll(any_activity) and self.after_job()
+
+            del had_job[:]
+            if self.has_job_lock():
+                had_job.append(True)
+
+            return self.after_poll(any_activity)
+
+        # Shuffle our connections after the poll timeout
+        while continue_working:
+            worker_connections = self.establish_worker_connections()
+            continue_working = self.poll_connections_until_stopped(worker_connections, continue_while_connections_alive, timeout=poll_timeout)
+
+        # If we were kicked out of the worker loop, we should shutdown all our connections
+        for current_connection in worker_connections:
+            current_connection.close()
+
+    def shutdown(self):
+        self.command_handler_holding_job_lock = None
+        super(GearmanWorker, self).shutdown()
+
+    ###############################################################
+    ## Methods to override when dealing with connection polling ##
+    ##############################################################
+    def establish_worker_connections(self):
+        """Return a shuffled list of connections that are alive, and try to reconnect to dead connections if necessary."""
+        self.randomized_connections = list(self.connection_list)
+        random.shuffle(self.randomized_connections)
+
+        output_connections = []
+        for current_connection in self.randomized_connections:
+            try:
+                valid_connection = self.establish_connection(current_connection)
+                output_connections.append(valid_connection)
+            except ConnectionError:
+                pass
+
+        return output_connections
+
+    def after_poll(self, any_activity):
+        """Polling callback to notify any outside listeners whats going on with the GearmanWorker.
+
+        Return True to continue polling, False to exit the work loop"""
         return True
 
-    def work(self, stop_if=None, hooks=None):
-        """Loop indefinitely working tasks from all connections."""
-        self.working = True
-        stop_if = stop_if or (lambda *a, **kw:False)
-        last_job_time = time()
-        while self.working:
-            need_sleep = True
+    def after_job(self):
+        """Callback to notify any outside listeners that a GearmanWorker has completed the current job.
 
-            # Try to grab work from all alive connections
-            for conn in self.alive_connections:
-                if conn.sleeping:
-                    continue
+        This is useful for accomplishing work or stopping the GearmanWorker in between jobs.
 
-                try:
-                    worked = self._work_connection(conn, hooks)
-                except conn.ConnectionError, exc:
-                    log.error("ConnectionError on %s: %s" % (conn, exc))
-                else:
-                    if worked:
-                        last_job_time = time()
-                        need_sleep = False
+        Return True to continue polling, False to exit the work loop
+        """
+        return True
 
-            # If no tasks were handled then sleep and wait for the server
-            # to wake us with a 'noop'
-            is_idle = False
-            if need_sleep:
-                is_idle = True
-                alive = self.alive_connections
-                for conn in alive:
-                    if not conn.sleeping:
-                        conn.send_command("pre_sleep")
-                        conn.sleeping = True
-                try:
-                    rd, wr, ex = select.select([c for c in alive if c.readable()], [], alive, 10)
-                except select.error, e:
-                    # Ignore interrupted system call, reraise anything else
-                    if e[0] != 4:
-                        raise
-                else:
-                    is_idle = not bool(rd)
+    def handle_error(self, current_connection):
+        """If we discover that a connection has a problem, we better release the job lock"""
+        current_handler = self.connection_to_handler_map.get(current_connection)
+        if current_handler:
+            self.set_job_lock(current_handler, lock=False)
 
-                    for c in ex:
-                        log.error("Exception on connection %s" % c)
-                        c.mark_dead()
+        super(GearmanWorker, self).handle_error(current_connection)
 
-                    for c in rd:
-                        c.sleeping = False
+    #############################################################
+    ## Public methods so Gearman jobs can send Gearman updates ##
+    #############################################################
+    def _get_handler_for_job(self, current_job):
+        return self.connection_to_handler_map[current_job.connection]
 
-            if stop_if(is_idle, last_job_time):
-                self.working = False
+    def wait_until_updates_sent(self, multiple_gearman_jobs, poll_timeout=None):
+        connection_set = set([current_job.connection for current_job in multiple_gearman_jobs])
+        def continue_while_updates_pending(any_activity):
+            return compat.any(current_connection.writable() for current_connection in connection_set)
+
+        self.poll_connections_until_stopped(connection_set, continue_while_updates_pending, timeout=poll_timeout)
+
+    def send_job_status(self, current_job, numerator, denominator, poll_timeout=None):
+        """Send a Gearman JOB_STATUS update for an inflight job"""
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_status(current_job, numerator=numerator, denominator=denominator)
+
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
+
+    def send_job_complete(self, current_job, data, poll_timeout=None):
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_complete(current_job, data=data)
+
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
+
+    def send_job_failure(self, current_job, poll_timeout=None):
+        """Removes a job from the queue if its backgrounded"""
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_failure(current_job)
+
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
+
+    def send_job_exception(self, current_job, data, poll_timeout=None):
+        """Removes a job from the queue if its backgrounded"""
+        # Using GEARMAND_COMMAND_WORK_EXCEPTION is not recommended at time of this writing [2010-02-24]
+        # http://groups.google.com/group/gearman/browse_thread/thread/5c91acc31bd10688/529e586405ed37fe
+        #
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_exception(current_job, data=data)
+        current_handler.send_job_failure(current_job)
+
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
+
+    def send_job_data(self, current_job, data, poll_timeout=None):
+        """Send a Gearman JOB_DATA update for an inflight job"""
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_data(current_job, data=data)
+
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
+
+    def send_job_warning(self, current_job, data, poll_timeout=None):
+        """Send a Gearman JOB_WARNING update for an inflight job"""
+        current_handler = self._get_handler_for_job(current_job)
+        current_handler.send_job_warning(current_job, data=data)
+
+        self.wait_until_updates_sent([current_job], poll_timeout=poll_timeout)
+
+    #####################################################
+    ##### Callback methods for GearmanWorkerHandler #####
+    #####################################################
+    def create_job(self, command_handler, job_handle, task, unique, data):
+        """Create a new job using our self.job_class"""
+        current_connection = self.handler_to_connection_map[command_handler]
+        return self.job_class(current_connection, job_handle, task, unique, data)
+
+    def on_job_execute(self, current_job):
+        try:
+            function_callback = self.worker_abilities[current_job.task]
+            job_result = function_callback(self, current_job)
+        except Exception:
+            return self.on_job_exception(current_job, sys.exc_info())
+
+        return self.on_job_complete(current_job, job_result)
+
+    def on_job_exception(self, current_job, exc_info):
+        self.send_job_failure(current_job)
+        return False
+
+    def on_job_complete(self, current_job, job_result):
+        self.send_job_complete(current_job, job_result)
+        return True
+
+    def set_job_lock(self, command_handler, lock):
+        """Set a worker level job lock so we don't try to hold onto 2 jobs at anytime"""
+        if command_handler not in self.handler_to_connection_map:
+            return False
+
+        failed_lock = bool(lock and self.command_handler_holding_job_lock is not None)
+        failed_unlock = bool(not lock and self.command_handler_holding_job_lock != command_handler)
+
+        # If we've already been locked, we should say the lock failed
+        # If we're attempting to unlock something when we don't have a lock, we're in a bad state
+        if failed_lock or failed_unlock:
+            return False
+
+        if lock:
+            self.command_handler_holding_job_lock = command_handler
+        else:
+            self.command_handler_holding_job_lock = None
+
+        return True
+    
+    def has_job_lock(self):
+        return bool(self.command_handler_holding_job_lock is not None)
+    
+    def check_job_lock(self, command_handler):
+        """Check to see if we hold the job lock"""
+        return bool(self.command_handler_holding_job_lock == command_handler)

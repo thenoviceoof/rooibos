@@ -1,177 +1,223 @@
-#!/usr/bin/env python
+import collections
+from gearman import compat
+import logging
+import os
+import random
+import weakref
 
-import time, select, errno
+import gearman.util
 
-from gearman.compat import *
-from gearman.connection import GearmanConnection
-from gearman.task import Task, Taskset
+from gearman.connection_manager import GearmanConnectionManager
+from gearman.client_handler import GearmanClientCommandHandler
+from gearman.constants import PRIORITY_NONE, PRIORITY_LOW, PRIORITY_HIGH, JOB_UNKNOWN, JOB_PENDING
+from gearman.errors import ConnectionError, ExceededConnectionAttempts, ServerUnavailable
 
-class GearmanBaseClient(object):
-    class ServerUnavailable(Exception):
-        pass
-    class CommandError(Exception):
-        pass
-    class InvalidResponse(Exception):
-        pass
+gearman_logger = logging.getLogger(__name__)
 
-    def __init__(self, job_servers, prefix=None, pre_connect=False):
+# This number must be <= GEARMAN_UNIQUE_SIZE in gearman/libgearman/constants.h
+RANDOM_UNIQUE_BYTES = 16
+
+class GearmanClient(GearmanConnectionManager):
+    """
+    GearmanClient :: Interface to submit jobs to a Gearman server
+    """
+    command_handler_class = GearmanClientCommandHandler
+
+    def __init__(self, host_list=None, random_unique_bytes=RANDOM_UNIQUE_BYTES):
+        super(GearmanClient, self).__init__(host_list=host_list)
+
+        self.random_unique_bytes = random_unique_bytes
+
+        # The authoritative copy of all requests that this client knows about
+        # Ignores the fact if a request has been bound to a connection or not
+        self.request_to_rotating_connection_queue = weakref.WeakKeyDictionary(compat.defaultdict(collections.deque))
+
+    def submit_job(self, task, data, unique=None, priority=PRIORITY_NONE, background=False, wait_until_complete=True, max_retries=0, poll_timeout=None):
+        """Submit a single job to any gearman server"""
+        job_info = dict(task=task, data=data, unique=unique, priority=priority)
+        completed_job_list = self.submit_multiple_jobs([job_info], background=background, wait_until_complete=wait_until_complete, max_retries=max_retries, poll_timeout=poll_timeout)
+        return gearman.util.unlist(completed_job_list)
+
+    def submit_multiple_jobs(self, jobs_to_submit, background=False, wait_until_complete=True, max_retries=0, poll_timeout=None):
+        """Takes a list of jobs_to_submit with dicts of
+
+        {'task': task, 'data': data, 'unique': unique, 'priority': priority}
         """
-        job_servers = ['host:post', 'host', ...]
+        assert type(jobs_to_submit) in (list, tuple, set), "Expected multiple jobs, received 1?"
+
+        # Convert all job dicts to job request objects
+        requests_to_submit = [self._create_request_from_dictionary(job_info, background=background, max_retries=max_retries) for job_info in jobs_to_submit]
+
+        return self.submit_multiple_requests(requests_to_submit, wait_until_complete=wait_until_complete, poll_timeout=poll_timeout)
+
+    def submit_multiple_requests(self, job_requests, wait_until_complete=True, poll_timeout=None):
+        """Take GearmanJobRequests, assign them connections, and request that they be done.
+
+        * Blocks until our jobs are accepted (should be fast) OR times out
+        * Optionally blocks until jobs are all complete
+
+        You MUST check the status of your requests after calling this function as "timed_out" or "state == JOB_UNKNOWN" maybe True
         """
-        self.prefix = prefix and "%s\t" % prefix or ""
-        self.set_job_servers(job_servers, pre_connect)
+        assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
+        stopwatch = gearman.util.Stopwatch(poll_timeout)
 
-    def set_job_servers(self, servers, pre_connect=False):
-        # TODO: don't shut down dups. shut down old ones gracefully
-        self.connections = []
-        self.connections_by_hostport = {}
-        for serv in servers:
-            connection = GearmanConnection(serv,timeout=2)
-            if pre_connect:
-                try:
-                    connection.connect()
-                except connection.ConnectionError:
-                    pass
-            self.connections.append(connection)
-            self.connections_by_hostport[connection.hostspec] = connection
+        # We should always wait until our job is accepted, this should be fast
+        time_remaining = stopwatch.get_time_remaining()
+        processed_requests = self.wait_until_jobs_accepted(job_requests, poll_timeout=time_remaining)
 
-class GearmanClient(GearmanBaseClient):
-    class TaskFailed(Exception):
-        pass
+        # Optionally, we'll allow a user to wait until all jobs are complete with the same poll_timeout
+        time_remaining = stopwatch.get_time_remaining()
+        if wait_until_complete and bool(time_remaining != 0.0):
+            processed_requests = self.wait_until_jobs_completed(processed_requests, poll_timeout=time_remaining)
 
-    def __call__(self, func, arg, uniq=None, **kwargs):
-        return self.do_task(Task(func, arg, uniq, **kwargs))
+        return processed_requests
 
-    def do_task(self, task):
-        """Return the result of the task or raise a TaskFailed exception on failure."""
-        def _on_fail():
-            raise self.TaskFailed("Task failed")
-        task.on_fail.append(_on_fail)
-        taskset = Taskset([task])
-        if not self.do_taskset(taskset, timeout=task.timeout):
-            raise self.TaskFailed("Task timeout")
-        return task.result
+    def wait_until_jobs_accepted(self, job_requests, poll_timeout=None):
+        """Go into a select loop until all our jobs have moved to STATE_PENDING"""
+        assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
 
-    def dispatch_background_task(self, func, arg, uniq=None, high_priority=False):
-        """Submit a background task and return its handle."""
-        task = Task(func, arg, uniq, background=True, high_priority=high_priority)
-        taskset = Taskset([task])
-        self.do_taskset(taskset)
-        return task.handle
+        def is_request_pending(current_request):
+            return bool(current_request.state == JOB_PENDING)
 
-    def get_server_from_hash(self, hsh):
+        # Poll until we know we've gotten acknowledgement that our job's been accepted
+        # If our connection fails while we're waiting for it to be accepted, automatically retry right here
+        def continue_while_jobs_pending(any_activity):
+            for current_request in job_requests:
+                if current_request.state == JOB_UNKNOWN:
+                    self.send_job_request(current_request)
+
+            return compat.any(is_request_pending(current_request) for current_request in job_requests)
+
+        self.poll_connections_until_stopped(self.connection_list, continue_while_jobs_pending, timeout=poll_timeout)
+
+        # Mark any job still in the queued state to poll_timeout
+        for current_request in job_requests:
+            current_request.timed_out = is_request_pending(current_request)
+
+        return job_requests
+
+    def wait_until_jobs_completed(self, job_requests, poll_timeout=None):
+        """Go into a select loop until all our jobs have completed or failed"""
+        assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
+
+        def is_request_incomplete(current_request):
+            return not current_request.complete
+
+        # Poll until we get responses for all our functions
+        # Do NOT attempt to auto-retry connection failures as we have no idea how for a worker got
+        def continue_while_jobs_incomplete(any_activity):
+            for current_request in job_requests:
+                if is_request_incomplete(current_request) and current_request.state != JOB_UNKNOWN:
+                    return True
+
+            return False
+
+        self.poll_connections_until_stopped(self.connection_list, continue_while_jobs_incomplete, timeout=poll_timeout)
+
+        # Mark any job still in the queued state to poll_timeout
+        for current_request in job_requests:
+            current_request.timed_out = is_request_incomplete(current_request)
+
+            if not current_request.timed_out:
+                self.request_to_rotating_connection_queue.pop(current_request, None)
+
+        return job_requests
+
+    def get_job_status(self, current_request, poll_timeout=None):
+        """Fetch the job status of a single request"""
+        request_list = self.get_job_statuses([current_request], poll_timeout=poll_timeout)
+        return gearman.util.unlist(request_list)
+
+    def get_job_statuses(self, job_requests, poll_timeout=None):
+        """Fetch the job status of a multiple requests"""
+        assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
+        for current_request in job_requests:
+            current_request.status['last_time_received'] = current_request.status.get('time_received')
+
+            current_connection = current_request.job.connection
+            current_command_handler = self.connection_to_handler_map[current_connection]
+
+            current_command_handler.send_get_status_of_job(current_request)
+
+        return self.wait_until_job_statuses_received(job_requests, poll_timeout=poll_timeout)
+
+    def wait_until_job_statuses_received(self, job_requests, poll_timeout=None):
+        """Go into a select loop until we received statuses on all our requests"""
+        assert type(job_requests) in (list, tuple, set), "Expected multiple job requests, received 1?"
+        def is_status_not_updated(current_request):
+            current_status = current_request.status
+            return bool(current_status.get('time_received') == current_status.get('last_time_received'))
+
+        # Poll to make sure we send out our request for a status update
+        def continue_while_status_not_updated(any_activity):
+            for current_request in job_requests:
+                if is_status_not_updated(current_request) and current_request.state != JOB_UNKNOWN:
+                    return True
+
+            return False
+
+        self.poll_connections_until_stopped(self.connection_list, continue_while_status_not_updated, timeout=poll_timeout)
+
+        for current_request in job_requests:
+            current_request.status = current_request.status or {}
+            current_request.timed_out = is_status_not_updated(current_request)
+
+        return job_requests
+
+    def _create_request_from_dictionary(self, job_info, background=False, max_retries=0):
+        """Takes a dictionary with fields  {'task': task, 'unique': unique, 'data': data, 'priority': priority, 'background': background}"""
+        # Make sure we have a unique identifier for ALL our tasks
+        job_unique = job_info.get('unique')
+        if not job_unique:
+            job_unique = os.urandom(self.random_unique_bytes).encode('hex')
+
+        current_job = self.job_class(connection=None, handle=None, task=job_info['task'], unique=job_unique, data=job_info['data'])
+
+        initial_priority = job_info.get('priority', PRIORITY_NONE)
+
+        max_attempts = max_retries + 1
+        current_request = self.job_request_class(current_job, initial_priority=initial_priority, background=background, max_attempts=max_attempts)
+        return current_request
+
+    def establish_request_connection(self, current_request):
         """Return a live connection for the given hash"""
-        # TODO: instead of cycling through, should we shuffle the list if the first connection fails or is dead?
-        first_idx = hsh % len(self.connections)
-        all_dead = all(conn.is_dead for conn in self.connections)
-        for idx in range(first_idx, len(self.connections)) + range(0, first_idx):
-            conn = self.connections[idx]
+        # We'll keep track of the connections we're attempting to use so if we ever have to retry, we can use this history
+        rotating_connections = self.request_to_rotating_connection_queue.get(current_request, None)
+        if not rotating_connections:
+            shuffled_connection_list = list(self.connection_list)
+            random.shuffle(shuffled_connection_list)
 
-            # if all of the connections are dead we should try reconnecting
-            if conn.is_dead and not all_dead:
-                continue
+            rotating_connections = collections.deque(shuffled_connection_list)
+            self.request_to_rotating_connection_queue[current_request] = rotating_connections
 
+        failed_connections = 0
+        chosen_connection = None
+        for possible_connection in rotating_connections:
             try:
-                conn.connect() # Make sure the connection is up (noop if already connected)
-            except conn.ConnectionError:
-                pass
-            else:
-                return conn
-
-        raise self.ServerUnavailable("Unable to Locate Server")
-
-    def _submit_task(self, task):
-        server = self.get_server_from_hash(hash(task))
-        if task.background:
-            func = "submit_job_bg"
-        elif task.high_priority:
-            func = "submit_job_high"
-        else:
-            func = "submit_job"
-        server.send_command(func,
-            dict(func=self.prefix + task.func, arg=task.arg, uniq=task.uniq))
-        server.waiting_for_handles.insert(0, task)
-        return server
-
-    def _command_handler(self, taskset, conn, cmd, args):
-        # DEBUG and _D( "RECEIVED COMMAND:", cmd, args )
-
-        handle = ('handle' in args) and ("%s//%s" % (conn.hostspec, args['handle'])) or None
-
-        if cmd != 'job_created' and handle:
-            task = taskset.get( taskset.handles.get(handle, None), None)
-            if not task:
-                return
-            if task.is_finished:
-                raise self.InvalidResponse("Task %s received %s" % (repr(task), cmd))
-
-        if cmd == 'work_complete':
-            task.complete(args['result'])
-        elif cmd == 'work_fail':
-            if task.retries_done < task.retry_count:
-                task.retries_done += 1
-                task.retrying()
-                task.handle = None
-                taskset.connections.add(self._submit_task(task))
-            else:
-                task.fail()
-        elif cmd == 'work_status':
-            task.status(int(args['numerator']), int(args['denominator']))
-        elif cmd == 'job_created':
-            task = conn.waiting_for_handles.pop()
-            task.handle = handle
-            taskset.handles[handle] = hash( task )
-            if task.background:
-                task.is_finished = True
-        elif cmd == 'error':
-            raise self.CommandError(str(args)) # TODO make better
-        else:
-            raise Exception("Unexpected command: %s" % cmd)
-
-    def do_taskset(self, taskset, timeout=None):
-        """Execute a Taskset and return True iff all tasks finished before timeout."""
-
-        # set of connections to which jobs were submitted
-        taskset.connections = set(self._submit_task(task) for task in taskset.itervalues())
-
-        taskset.handles = {}
-
-        start_time = time.time()
-        end_time = timeout and start_time + timeout or 0
-        while not taskset.cancelled and not all(t.is_finished for t in taskset.itervalues()):
-            timeleft = timeout and end_time - time.time() or 0.5
-            if timeleft <= 0:
-                taskset.cancel()
+                chosen_connection = self.establish_connection(possible_connection)
                 break
+            except ConnectionError:
+                # Rotate our server list so we'll skip all our broken servers
+                failed_connections += 1
 
-            rx_socks = [c for c in taskset.connections if c.readable()]
-            tx_socks = [c for c in taskset.connections if c.writable()]
-            try:
-                rd_list, wr_list, ex_list = select.select(rx_socks, tx_socks, taskset.connections, timeleft)
-            except select.error, exc:
-                # Ignore interrupted system call, reraise anything else
-                if exc[0] != errno.EINTR:
-                    raise
-                continue
+        if not chosen_connection:
+            raise ServerUnavailable('Found no valid connections: %r' % self.connection_list)
 
-            for conn in ex_list:
-                pass # TODO
+        # Rotate our server list so we'll skip all our broken servers
+        rotating_connections.rotate(-failed_connections)
+        return chosen_connection
 
-            for conn in rd_list:
-                for cmd in conn.recv():
-                    self._command_handler(taskset, conn, *cmd)
+    def send_job_request(self, current_request):
+        """Attempt to send out a job request"""
+        if current_request.connection_attempts >= current_request.max_connection_attempts:
+            raise ExceededConnectionAttempts('Exceeded %d connection attempt(s) :: %r' % (current_request.max_connection_attempts, current_request))
 
-            for conn in wr_list:
-                conn.send()
+        chosen_connection = self.establish_request_connection(current_request)
 
-        # TODO: should we fail all tasks that didn't finish or leave that up to the caller?
+        current_request.job.connection = chosen_connection
+        current_request.connection_attempts += 1
+        current_request.timed_out = False
 
-        return all(t.is_finished for t in taskset.itervalues())
-
-    def get_status(self, handle):
-        hostport, shandle = handle.split("//")
-
-        server = self.connections_by_hostport[hostport]
-        server.connect() # Make sure the connection is up (noop if already connected)
-        server.send_command("get_status", dict(handle=shandle))
-        return server.recv_blocking()[1]
+        current_command_handler = self.connection_to_handler_map[chosen_connection]
+        current_command_handler.send_job_request(current_request)
+        return current_request
