@@ -120,7 +120,7 @@
 	</p>
 
     {% else %}
-        <h2>Welcome{% if user.first_name %}, {{ user.first_name }}{% endif %}</h2>
+        <h2>{% if user.first_name %}Logged in as {{ user.first_name }}{% else %}Logged in{% endif %}</h2>
     {% endif %}
     <p>This digital image database is curated by the Media Center for Art History in the Department of Art History and Archaeology at Columbia University.</p>
     </div>

@@ -102,7 +102,7 @@
     <div id="topmenu">
         <ul>
             {% if user.is_authenticated and not user.username in ANONYMOUS_DOMAIN_USERS %}
-            <li>{% if user.first_name %}Logged in as {{ user.first_name }}{% else %}Welcome{% endif %}</li>
+            <li>{% if user.first_name %}Logged in as {{ user.first_name }}{% else %}Logged in{% endif %}</li>
             <li><a href="{% url logout %}?next={% url main %}">Log out</a></li>
             <li><a href="{% url ui-options %}">Options</a></li>
             <li><a href="{% url ui-management %}">Management</a></li>
