@@ -1,6 +1,5 @@
 from django.db import models
 from django.contrib.auth.models import User
-from rooibos.contrib.gearman.task import Task
 from registration import run_worker
 from datetime import datetime, timedelta
 
@@ -37,5 +36,5 @@ class JobInfo(models.Model):
         self.update_status(status)
 
     def stalled(self):
-        return not self.completed and self.status_time and (datetime.now() - self.status_time > timedelta(0, 60))
-    
+        return (not self.completed and self.status_time and
+                (datetime.now() - self.status_time > timedelta(0, 60)))
