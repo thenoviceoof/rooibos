@@ -20,7 +20,7 @@ class JobInfo(models.Model):
         try:
             self.status = 'Starting'
             self.save()
-            return run_worker(self.func, self.id, background=True)
+            return run_worker(self.func, str(self.id), background=True)
         except Exception, ex:
             self.status = 'Start failed. %s' % ex
             self.save()

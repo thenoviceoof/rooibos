@@ -31,6 +31,7 @@ from django.contrib import messages
 import os
 import random
 import string
+import logging
 
 
 def collections(request):
@@ -695,13 +696,9 @@ def reindex(request):
         return HttpResponseRedirect("/")
 
     j = JobInfo.objects.create(owner=request.user,
-                               func='solr-reindex',
+                               func='solr_reindex',
                                arg="")
     j.run()
-    request.user.message_set.create(message='Import job has been submitted.')
+    logging.info("reindex job submitted by %s" % request.user)
+    request.user.message_set.create(message='Reindex job has been submitted.')
     return HttpResponseRedirect("%s?highlight=%s" % (reverse('workers-jobs'), j.id))
-
-    # solr = SolrIndex()
-    # solr.index()
-    # return render_to_response('data_reindex.html',
-    #                           context_instance=RequestContext(request))

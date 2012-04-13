@@ -1,6 +1,8 @@
 import sys
 from django.conf import settings
+import gearman
 from gearman import GearmanWorker, GearmanClient
+import logging
 
 # misnomer, local dictionary keeping track of work tasks
 workers = dict()
@@ -11,9 +13,11 @@ else:
     client = None
 
 def register_worker(id):
-    def register(worker):
-        workers[id] = worker
-        return worker
+    def register(worker_func):
+        def worker_func_wrapper(gearman_worker, job):
+            return worker_func(job)
+        workers[id] = worker_func_wrapper
+        return worker_func_wrapper
     return register
 
 def discover_workers():
@@ -35,13 +39,13 @@ def create_worker():
 
 def run_worker(worker, arg, **kwargs):
     discover_workers()
+    logging.info("Running worker %s" % worker)
     if client:
-        request = client.submit_job(worker, arg)
         # specific check if we want it asynchronously or not
-        if kwargs.get("background", None):
-            return request
-        else:
-            return request.result
+        background = kwargs.get("background", False)
+        request = client.submit_job(worker, arg, background=background,
+                                    priority=gearman.PRIORITY_LOW)
+        return request
     else:
         # presume this assumes workers is a set of functions
         if workers.has_key(worker):

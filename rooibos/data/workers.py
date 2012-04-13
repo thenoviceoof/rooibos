@@ -15,7 +15,7 @@ from views import _get_scratch_dir
 def csvimport(job):
 
     logging.info('csvimport started for %s' % job)
-    jobinfo = JobInfo.objects.get(id=job.arg)
+    jobinfo = JobInfo.objects.get(id=job.data)
 
     try:
 
@@ -91,11 +91,12 @@ def csvimport(job):
 
 from rooibos.solr import SolrIndex
 
-@register_worker('solr-reindex')
+@register_worker('solr_reindex')
 def solr_reindex(job):
-    logging.info('solr-reindex started for %s' % job)
-    jobinfo = JobInfo.objects.get(id=job.arg)
+    logging.info('solr_reindex started for %s' % job)
+    jobinfo = JobInfo.objects.get(id=job.data)
 
+    logging.info("got jobinfo")
     try:
         if jobinfo.status.startswith == 'Complete':
             # job finished previously
@@ -104,7 +105,7 @@ def solr_reindex(job):
         solr = SolrIndex()
         # first, index
         count = 0
-        for i in solr.index(verbose=True, all=True, batch_size=100, generator=True):
+        for i in solr.index_generator(verbose=True, all=True, batch_size=100):
             jobinfo.update_status('indexing record %d' % i)
             count = i
         # then clear out the missing stuff

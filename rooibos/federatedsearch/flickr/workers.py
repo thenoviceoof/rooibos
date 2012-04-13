@@ -14,7 +14,7 @@ import traceback
 def flickr_download_media(job):
 
     logging.info('flickr_download_media started for %s' % job)
-    jobinfo = JobInfo.objects.get(id=job.arg)
+    jobinfo = JobInfo.objects.get(id=job.data)
 
     try:
         if jobinfo.status.startswith == 'Complete':

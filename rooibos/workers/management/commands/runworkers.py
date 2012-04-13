@@ -3,23 +3,9 @@ from threading import Thread
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from rooibos.workers.registration import create_worker
-from gearman.server import GearmanServer
 from optparse import make_option
 import rooibos.contrib.djangologging.middleware # does not get loaded otherwise
 import logging
-
-
-class Server(Thread):
-
-    def __init__(self, verbosity):
-        super(Server, self).__init__()
-        self.verbosity = verbosity
-
-    def run(self):
-        if self.verbosity > 0:
-            logging.info("Starting server")
-        self.server = GearmanServer(settings.GEARMAN_SERVERS[0])
-        self.server.start()
 
 
 class Command(BaseCommand):
@@ -35,14 +21,10 @@ class Command(BaseCommand):
         verbosity = options.get('verbosity', 1)
         server = options.get('server', False)
 
-        if not settings.GEARMAN_SERVERS:
-            logging.error("No gearman servers configured")
-            return
-
         if server:
-            Server(verbosity).start()
+            logging.warning("Server option is deprecated, you must run your own gearmand")
 
         worker = create_worker()
         if verbosity > 0:
-            logging.info("Starting workers: " + ', '.join(worker.abilities.keys()))
+            logging.info("Starting workers: " + ', '.join(worker.worker_abilities.keys()))
         worker.work()
