@@ -158,7 +158,9 @@
                             {% if user|accessible_objects:"data.Collection,rw"|length %}
                             <li><a href="{% url data-record-new %}">Create Collection Item</a></li>
                             {% endif %}
+                            {% if perms.rooibos.add_presentation %}
                             <li><a href="{% url presentation-create %}">Create Presentation</a></li>
+			    {% endif %}
                         </ul>
                     </li>
                     {% endif %}
