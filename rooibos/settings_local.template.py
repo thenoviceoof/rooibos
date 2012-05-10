@@ -197,3 +197,6 @@ WIND_PROF_GROUP = None
 # as of Apache 2.2.3 (ours 2.2.17) uploads through HTTPS don't work, so we
 # reroute them through HTTP insteadx
 #INSECURE_UPLOAD = True
+
+# note: usually lower case
+DEFAULT_BROWSE_FIELD = "creator"

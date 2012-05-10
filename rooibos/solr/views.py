@@ -23,6 +23,7 @@ import re
 import copy
 import random
 import logging
+from django.conf import settings
 
 
 class SearchFacet(object):
@@ -601,6 +602,7 @@ def browse(request, id=None, name=None):
         fields = list(Field.objects.filter(id__in=fields))
     else:
         fields = list(Field.objects.filter(fieldvalue__record__collection=collection).distinct())
+        fields.sort(key=lambda x: x.id)
         cache.set('browse_fields_%s' % collection.id, [f.id for f in fields], 60)
 
     if not fields:
@@ -614,7 +616,14 @@ def browse(request, id=None, name=None):
             return HttpResponseRedirect(reverse('solr-browse-collection',
                                         kwargs={'id': collection.id, 'name': collection.name}))
     else:
-        field = fields[0]
+        field = None
+        if settings.DEFAULT_BROWSE_FIELD:
+            try:
+                field = fields[[f.name for f in fields].index(settings.DEFAULT_BROWSE_FIELD)]
+            except ValueError:
+                field = None
+        if not field:
+            field = field[0]
 
     values = FieldValue.objects.filter(field=field, record__collection=collection).values('value').annotate(freq=Count('value', distinct=False)).order_by('value')
 
