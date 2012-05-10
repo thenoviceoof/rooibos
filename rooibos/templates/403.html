@@ -8,9 +8,14 @@
   <a href="/">Homepage</a>
 </h2>
 
+{% if user.is_authenticated and not user.username in ANONYMOUS_DOMAIN_USERS %}
+{% else %}
+<form method="post" action="https://wind.columbia.edu/login" name="submitwind">
+  <input type="hidden" name="destination" value="https://{{ request.META.HTTP_HOST }}/wind/">
 <h2>
-  <a href="{% url login %}">Sign in</a>
+  <a href="#" onclick="document.submitwind.submit();">Login</a>
 </h2>
+{% endif %}
 
 <h2>
   <a href="javascript:history.back()">Go back</a>
